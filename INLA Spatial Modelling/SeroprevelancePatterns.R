@@ -2,7 +2,7 @@
 # 2) Patterns of observed seroprevelance (aggregated by district, mosquito proportion and age) 
 
 # --- Source functions
-source(here('SpatialModellingFunctions.R'))
+source(here('Functions.R'))
 
 
 # Load data with pop weighted coords (post preprocessing) 
