@@ -8,6 +8,11 @@ source(here('SpatialModellingFunctions.R'))
 # Load data with pop weighted coords (post preprocessing) 
 cameroon_data <- readRDS('sf_meta_data_with_coords_pw .rds')
 nrow(meta_data_with_coords)
+length(unique(cameroon_data$Sample))
+cameroon_data <- cameroon_data[!duplicated(cameroon_data$Sample), ]
+
+cameroon_data$year_of_survey <- as.numeric(substr(cameroon_data$Sample, 1, 4))
+unique(cameroon_data$year_of_survey)
 
 
 # Load population rasters
@@ -200,5 +205,13 @@ prop_gam_prev <- ggplot(df_gam, aes(x = x, y = y)) +
 
 
 
-# save RDS 
-saveRDS(cameroon_data, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/16thJan2026_cameroon_data.rds')
+#--- 4) Proportion positive by age / sex 
+# distributions by age 
+plot_age_seroprevalence_by_year_obs(model_data, 'ONNV_pos')
+plot_age_seroprevalence_by_year_obs(model_data, 'CHIK_pos')
+
+# distributions by age statified bt sex 
+plot_age_seroprevalence_by_year_gender_obs(model_data, 'ONNV_pos')
+plot_age_seroprevalence_by_year_gender_obs(model_data, 'CHIK_pos')
+
+
