@@ -21,9 +21,7 @@ anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Ano
 
 
 
-
 # ---1) Match district names in data with shapefiles to extract geometry info for each district 
-
 # Clean names + create lower case district column
 cam_shapefile_districts$NAME2 <- gsub("DS_", "", cam_shapefile_districts$NAME2)
 cam_shapefile_districts <- cam_shapefile_districts %>%
@@ -56,7 +54,7 @@ manoka_merged <- cam_shapefile_districts %>%
 other_districts <- cam_shapefile_districts %>%
   filter(shapefile_district_lower != "manoka")
 
-# Combine them
+# Combine
 cam_shapefile_districts_merged <- bind_rows(other_districts, manoka_merged)
 
 
@@ -116,7 +114,6 @@ meta_data_cleaned <- meta_data %>%
 
 
 # Shapefile 2 since there are still districts in data missing from shapefile 1
-
 # Merge geometries in the second shapefile (in case it has duplicates too)
 cam_shapefile_districts2 <- cam_shapefile_districts2 %>%
   mutate(shapefile_district_lower2 = tolower(adm3_name1))
@@ -188,14 +185,72 @@ ggplot(sf_meta_data_with_coords) +
 
 
 
-
 # --- 2) Population-Weighted Centroids 
 # Calculates the geographic center of each district weighted by where people actually live,
 # rather than the simple geometric cente
+sf_meta_data_with_coords <- st_as_sf(meta_data_with_coords) %>%
+  filter(!st_is_empty(geometry)) %>%
+  filter(!is.na(st_dimension(geometry)))
+nrow(sf_meta_data_with_coords)
+
+# Create district polygons with area
+districts <- sf_meta_data_with_coords %>%
+  st_transform(32633) %>%  # UTM Zone 33N
+  group_by(district_lower) %>%
+  summarise(
+    geometry = st_union(geometry),
+    .groups = "drop"
+  ) %>%
+  mutate(area_km2 = as.numeric(st_area(geometry)) / 1e6) %>%
+  st_transform(crs = crs(cam_pop)) %>%
+  mutate(district_id = dplyr::row_number())
 
 
+# Create population stack
+area_rast_pop <- terra::cellSize(cam_pop, unit = "km")
+cam_stack_pop <- c(cam_pop, area_rast_pop)
+names(cam_stack_pop) <- c("population_per_pixel", "cell_area")
 
+# Function to  Calculate population-weighted centroid
+pop_weighted_centroid <- function(df, ...) {
+  pop_per_cell <- df$population_per_pixel * df$coverage_fraction
+  total_pop <- sum(pop_per_cell, na.rm = TRUE)
+  
+  if (is.na(total_pop) || total_pop == 0) {
+    return(data.frame(
+      Longitude = NA_real_,
+      Latitude = NA_real_,
+      Total_Population = 0
+    ))
+  }
+  
+  cx <- sum(df$x * pop_per_cell, na.rm = TRUE) / total_pop
+  cy <- sum(df$y * pop_per_cell, na.rm = TRUE) / total_pop
+  
+  data.frame(
+    Longitude = cx,
+    Latitude = cy,
+    Total_Population = total_pop
+  )
+}
 
+# Calculate centroids
+centroids_df <- exact_extract(
+  cam_stack_pop,
+  districts,
+  fun = pop_weighted_centroid,
+  include_xy = TRUE,
+  summarize_df = TRUE,
+  progress = TRUE
+) %>%
+  dplyr::bind_cols(districts %>% st_drop_geometry() %>% dplyr::select(district_lower, district_id)) %>%
+  left_join(
+    districts %>% st_drop_geometry() %>% select(district_lower, area_km2),  # Drop geometry here
+    by = "district_lower"
+  )
+
+# valide: sum(total population) == approx population of Cameroon
+sum(centroids_df$Total_Population)
 
 
 
@@ -204,9 +259,116 @@ ggplot(sf_meta_data_with_coords) +
 # Calculates the average mosquito density (Aedes aegypti, Aedes albopictus, Anopheles funestus, Anopheles gambiae) experienced by the population in each district. 
 # Each raster cell's mosquito value is weighted by the number of people living in that cell, then averaged across the district. 
 # This represents the district-wide mosquito exposure of the population, accounting for both spatial variation in mosquito density and population distribution.
+aegypti_cam_pop <- resample(aegypti, cam_pop, method = "bilinear")
+stack_pop_aeg <- c(cam_pop, area_rast_pop, aegypti_cam_pop)
+names(stack_pop_aeg) <- c("population_per_pixel", "cell_area", "aeg")
+
+# -- Aedes albopictus
+albopictus_cam_pop <- resample(albopictus, cam_pop, method = "bilinear")
+stack_pop_alb <- c(cam_pop, area_rast_pop, albopictus_cam_pop)
+names(stack_pop_alb) <- c("population_per_pixel", "cell_area", "alb")
+
+# --- Anopheles funestus 
+funestus_cam_pop <- resample(anopheles_funestus, cam_pop, method = "bilinear")
+stack_pop_fun <- c(cam_pop, area_rast_pop, funestus_cam_pop)
+names(stack_pop_fun) <- c("population_per_pixel", "cell_area", "fun")
+
+# --- Anopheles funestus 
+gambiae_cam_pop <- resample(anopheles_gambiae, cam_pop, method = "bilinear")
+stack_pop_gam <- c(cam_pop, area_rast_pop, gambiae_cam_pop)
+names(stack_pop_gam) <- c("population_per_pixel", "cell_area", "gam")
 
 
 
+# Function for population-weighted mean of mosquito distribution per district
+pop_weighted_mean_fun <- function(df, var_name, ...) {
+  pop_count <- df$population_per_pixel * df$coverage_fraction
+  total_pop <- sum(pop_count, na.rm = TRUE)
+  
+  if (is.na(total_pop) || total_pop == 0) {
+    return(setNames(data.frame(NA_real_), paste0(var_name, "_pw_district")))
+  }
+  
+  weighted_mean <- sum(df[[var_name]] * pop_count, na.rm = TRUE) / total_pop
+  setNames(data.frame(weighted_mean), paste0(var_name, "_pw_district"))
+}
 
-# Save files with coords for downstream analysis
-saveRDS(meta_data_with_coords, 'meta_data_with_coords.rds')
+# Calculate mosquito distributions
+aeg_pw_df <- exact_extract(
+  stack_pop_aeg,
+  districts,
+  fun = function(df, ...) pop_weighted_mean_fun(df, "aeg", ...),
+  summarize_df = TRUE,
+  include_xy = TRUE,
+  progress = TRUE
+) %>%
+  mutate(district_id = districts$district_id, district_lower = districts$district_lower)
+
+alb_pw_df <- exact_extract(
+  stack_pop_alb,
+  districts,
+  fun = function(df, ...) pop_weighted_mean_fun(df, "alb", ...),
+  summarize_df = TRUE,
+  include_xy = TRUE,
+  progress = TRUE
+) %>%
+  mutate(district_id = districts$district_id, district_lower = districts$district_lower)
+
+# Calculate Anopheles distributions (population-weighted)
+fun_pw_df <- exact_extract(
+  stack_pop_fun,
+  districts,
+  fun = function(df, ...) pop_weighted_mean_fun(df, "fun", ...),
+  summarize_df = TRUE,
+  include_xy = TRUE,
+  progress = TRUE
+) %>%
+  mutate(district_id = districts$district_id, district_lower = districts$district_lower)
+
+gam_pw_df <- exact_extract(
+  stack_pop_gam,
+  districts,
+  fun = function(df, ...) pop_weighted_mean_fun(df, "gam", ...),
+  summarize_df = TRUE,
+  include_xy = TRUE,
+  progress = TRUE
+) %>%
+  mutate(district_id = districts$district_id, district_lower = districts$district_lower)
+
+
+# --- Combine all into one dataframe 
+sf_meta_data_with_coords_pw <- sf_meta_data_with_coords %>%
+  left_join(
+    centroids_df %>% 
+      st_drop_geometry() %>%  # Drop geometry to avoid duplication
+      select(-district_id), 
+    by = "district_lower"
+  ) %>%
+  left_join(aeg_pw_df %>% select(district_lower, aeg_pw_district), by = "district_lower") %>%
+  left_join(alb_pw_df %>% select(district_lower, alb_pw_district), by = "district_lower") %>%
+  left_join(fun_pw_df %>% select(district_lower, fun_pw_district), by = "district_lower") %>%
+  left_join(gam_pw_df %>% select(district_lower, gam_pw_district), by = "district_lower")
+
+
+# --- Validate: Plot Population weighted vs unweighted coords 
+sf_use_s2(FALSE)
+unweighted_centroids <- st_centroid(sf_meta_data_with_coords)
+unweighted_centroids <- st_coordinates(unweighted_centroids)
+
+ggplot() +
+  # Plot the polygons
+  geom_sf(data = sf_meta_data_with_coords, fill = "white", color = "black", linewidth = 0.3) +
+  # Add the weighted centroids as points using lon/lat coordinates
+  geom_point(data = centroids_df, aes(x = Longitude, y = Latitude), 
+             color = "red", size = 2, shape = 16) +
+  geom_point(data = unweighted_centroids, aes(x = X, y = Y), 
+             color = "darkblue", size = 2, shape = 16) +
+  
+  theme_minimal() +
+  labs(title = "Cameroon: Population-Weighted Centroids",
+       x = "Longitude", y = "Latitude")
+
+
+
+# --- Save file with pop weighted coords and mosquito proportions for downstream analysis
+saveRDS(sf_meta_data_with_coords_pw, 'sf_meta_data_with_coords_pw.rds')
