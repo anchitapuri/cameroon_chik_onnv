@@ -2,6 +2,23 @@
 # using the stochastic partial differential equation (SPDE) approach and the R-INLA package.
 
 
+# Get Cameroon boundary
+cameroon <- ne_countries(country = "Cameroon", returnclass = "sf")
+
+# Population and mosquito rasts
+anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_funestus_CMR.tiff')
+anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_gambiae_ss_CMR.tiff')
+cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
+
+
+# Cameroon population by age
+cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/CameroonAge2025.csv')
+cameroon_age_2025 <- cameroon_age_2025 %>%
+  mutate(total = M + F)
+
+# ----- 
+cameroon_data <- readRDS('sf_meta_data_with_coords_pw.rds')
+nrow(cameroon_data)
 
 
 # --- Compare models with difference covariates ----                       
@@ -162,6 +179,6 @@ plot_age_seroprevalence_model_fits( est_model$year,best_model, model_data, "ONNV
 
                          
 # --- Save best model results ----
-saveRDS(results_onnv, '~/Desktop/Cameroon_Analysis_2025/results_onnv.rds', compress = "gzip")
+saveRDS(best_model, 'ONNV_INLAResults.rds', compress = "gzip")
 
                          
