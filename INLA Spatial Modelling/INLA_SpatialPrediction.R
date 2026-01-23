@@ -2,6 +2,9 @@
 # using the stochastic partial differential equation (SPDE) approach and the R-INLA package.
 
 
+# --- Source functions
+source(here('Functions.R'))
+
 # Get Cameroon boundary
 cameroon <- ne_countries(country = "Cameroon", returnclass = "sf")
 
