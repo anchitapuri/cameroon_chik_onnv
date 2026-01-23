@@ -5,12 +5,12 @@ nrow(original data) = 6336
 nrow(after dropping NA in CHIK / ONNV / MAY titre cols) = 5407 (Multisero model ran on this) 
 
 Multisero model Labels: 
-  ONNV_pos: 
-    0 = 4109
-    1 = 1298
-  CHIK_pos: 
-    0 = 5379
-    1 = 28
+  - ONNV_pos: 
+    - 0 = 4109
+    - 1 = 1298
+  - CHIK_pos: 
+    - 0 = 5379
+    - 1 = 28
 
 
 
@@ -75,9 +75,9 @@ and so rows with these districts are removed from downstream analysis)
 ```
     
 # After preprocessing 
-Total rows in meta_data: 5407 
-Total rows after merge: 5407 
-Rows with geometry: 5194
-= 213 rows without geometry 
+- Total rows in meta_data: 5407 
+- Total rows after merge: 5407 
+- Rows with geometry: 5194
+  = 213 rows without geometry 
 
 (Spatial analysis + INLA Run on these 5194 rows with geometry info) 
