@@ -51,12 +51,13 @@ Mismatche mapping used: (second name is as it appears in the shapefile)
     district_lower == 'bandjoun' ~ "banjoun", 
     district_lower == 'bangangte' ~ "bangante",
     district_lower == 'bangourain' ~ "bangorain"
-
+```
 
 
 After using both shapefiles + mapping, these districts are still not matched (ie do have geometry information for these, 
 and so rows with these districts are removed from downstream analysis) 
 
+```text
  district_lower  n (= rows in the data  with these districts) 
 1            boko 38
 2            dang 33
@@ -71,7 +72,7 @@ and so rows with these districts are removed from downstream analysis)
 11           <NA>  3
 12         abeche  1
 13        biltine  1
-
+```
     
 # After preprocessing 
 Total rows in meta_data: 5407 
