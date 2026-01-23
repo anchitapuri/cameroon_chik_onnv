@@ -1,3 +1,121 @@
+
+# --- SEROPOSITIVITY BY DISTRICT
+calculate_district_prevalence <- function(data, positive_col) {
+  data %>%
+    group_by(district_lower) %>%
+    summarise(
+      mean_positive = mean(.data[[positive_col]]),
+      n_samples = dplyr::n(),
+      n_positive = sum(.data[[positive_col]] == 1, na.rm = TRUE),
+      .groups = "drop"
+    )
+}
+
+# --- ODDS RATIO ANALYSIS (FUNCTION)
+calculate_odds_ratio <- function(data, positive_col, n_iter = 100) {
+  
+  N <- nrow(data)
+  
+  # Distance matrix
+  dmat <- as.matrix(dist(cbind(data$Easting, data$Northing)))
+  diag(dmat) <- NA
+  
+  # Get positive indices
+  ind <- which(data[[positive_col]] == 1)
+  dmat2_neg <- dmat2_pos <- dmat2 <- dmat[ind, ]
+  dmat2_pos[, -ind] <- NA
+  dmat2_neg[, ind] <- NA
+  
+  # Distance bins
+  distmax <- seq(0, 500, 20)
+  distmin <- distmax - 50
+  distmin[which(distmin < 0)] <- 10
+  distmin[1] <- 0
+  distmid <- (distmax + distmin) / 2
+  
+  # Calculate OR
+  counts_pos_1 <- cumsum(hist(dmat2_pos, breaks = c(distmax, 1e10), plot = FALSE)$counts)
+  counts_neg_1 <- cumsum(hist(dmat2_neg, breaks = c(distmax, 1e10), plot = FALSE)$counts)
+  counts_pos_2 <- cumsum(hist(dmat2_pos, breaks = c(distmin, 1e10), plot = FALSE)$counts)
+  counts_neg_2 <- cumsum(hist(dmat2_neg, breaks = c(distmin, 1e10), plot = FALSE)$counts)
+  
+  counts_pos_win <- counts_pos_1 - counts_pos_2
+  counts_neg_win <- counts_neg_1 - counts_neg_2
+  
+  allPos <- sum(dmat2_pos >= 0, na.rm = TRUE)
+  allNeg <- sum(dmat2_neg >= 0, na.rm = TRUE)
+  overallPropPos <- allPos / allNeg
+  
+  OR <- (counts_pos_win / counts_neg_win) / overallPropPos
+  
+  # Bootstrap
+  bs_out <- matrix(NaN, length(distmax), n_iter)
+  for (i in 1:n_iter) {
+    a <- sample(N, replace = TRUE)
+    ind_bs <- which(data[[positive_col]][a] == 1)
+    dmat_bs <- dmat[a, a]
+    
+    dmat2_neg_bs <- dmat2_pos_bs <- dmat_bs[ind_bs, ]
+    dmat2_pos_bs[, -ind_bs] <- NA
+    dmat2_neg_bs[, ind_bs] <- NA
+    
+    counts_pos_1 <- cumsum(hist(dmat2_pos_bs, breaks = c(distmax, 1e10), plot = FALSE)$counts)
+    counts_neg_1 <- cumsum(hist(dmat2_neg_bs, breaks = c(distmax, 1e10), plot = FALSE)$counts)
+    counts_pos_2 <- cumsum(hist(dmat2_pos_bs, breaks = c(distmin, 1e10), plot = FALSE)$counts)
+    counts_neg_2 <- cumsum(hist(dmat2_neg_bs, breaks = c(distmin, 1e10), plot = FALSE)$counts)
+    
+    counts_pos_win <- counts_pos_1 - counts_pos_2
+    counts_neg_win <- counts_neg_1 - counts_neg_2
+    
+    allPos <- sum(dmat2_pos_bs >= 0, na.rm = TRUE)
+    allNeg <- sum(dmat2_neg_bs >= 0, na.rm = TRUE)
+    overallPropPos <- allPos / allNeg
+    
+    bs_out[, i] <- (counts_pos_win / counts_neg_win) / overallPropPos
+  }
+  
+  CI <- apply(bs_out, 1, quantile, probs = c(0.025, 0.975), na.rm = TRUE)
+  
+  # Return results
+  list(
+    distance = distmid,
+    OR = OR,
+    CI_lower = CI[1, ],
+    CI_upper = CI[2, ],
+    plot_data = data.frame(
+      distance = distmid,
+      odds_ratio = OR,
+      ci_lower = CI[1, ],
+      ci_upper = CI[2, ]
+    )
+  )
+}
+
+# --- PROP POS BY MOSQUITO + LOG POP DENSITY 
+calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, breaks_min) {
+  var_mid <- rep(NaN, length(breaks_max))
+  prop_pos <- matrix(NaN, length(breaks_max), 3)
+  
+  for (i in 1:length(breaks_max)) {
+    tmp <- which(data[[var_col]] < breaks_max[i] & data[[var_col]] >= breaks_min[i])
+    if (length(tmp) > 5) {
+      prop_pos[i, 1] <- mean(data[[positive_col]][tmp], na.rm = TRUE)
+      a <- prop.test(sum(data[[positive_col]][tmp]), length(tmp))
+      prop_pos[i, 2:3] <- a$conf.int
+      var_mid[i] <- mean(data[[var_col]][tmp], na.rm = TRUE)
+    }
+  }
+  
+  data.frame(
+    x = var_mid,
+    y = prop_pos[, 1],
+    ymin = prop_pos[, 2],
+    ymax = prop_pos[, 3]
+  )
+}
+
+
+
 # ---- Function for Year of Intro INLA models ----
 run_inla <- function(year_intro, data, cameroon, positive_col) {
   
