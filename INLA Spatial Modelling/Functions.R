@@ -115,6 +115,136 @@ calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, 
 }
 
 
+# --- seroprevelance by age group by year obs data ---
+plot_age_seroprevalence_by_year <- function(data, positive_col) {
+  
+  # Recreate the filtered dataset used in the model
+  data_plot <- data
+  
+  # Age groups
+  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
+  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
+  data_plot$age_group <- cut(
+    data_plot$AgeInYears,
+    breaks = age_breaks,
+    labels = age_labels,
+    include.lowest = TRUE,
+    right = FALSE
+  )
+  
+  # Create a formula dynamically using the positive_col parameter
+  formula_mean <- as.formula(paste(positive_col, "~ year_of_survey + age_group"))
+  formula_length <- as.formula(paste(positive_col, "~ year_of_survey + age_group"))
+  
+  # Summaries by year and age group
+  obs <- aggregate(formula_mean, data_plot, mean, na.rm = TRUE)
+  n_by <- aggregate(formula_length, data_plot, length)
+  names(n_by)[3] <- "n"
+  names(obs)[3] <- "proportion_positive"  # Rename for clarity
+  
+  obs <- merge(obs, n_by, by = c("year_of_survey", "age_group"))
+  obs$obs_lower <- pmax(0, obs$proportion_positive - 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
+  obs$obs_upper <- pmin(1, obs$proportion_positive + 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
+  
+  y_limits <- if (positive_col == "CHIK_pos") {
+    c(0, 0.08)
+  } else {
+    c(0, 0.8)
+  }
+  
+  # Plot
+  p <- ggplot() +
+    geom_point(data = obs, aes(x = age_group, y = proportion_positive), size = 2, color = '#0d1b2a') +
+    geom_errorbar(data = obs, aes(x = age_group, ymin = obs_lower, ymax = obs_upper), width = 0.15, color = '#0d1b2a') +
+    
+    facet_wrap(~ year_of_survey, ncol = 5) +
+
+    scale_y_continuous(limits = y_limits) +
+    labs(
+      x = "Age group",
+      y = "Proportion seropositive",
+      title = paste("Observed seroprevalence by age group -", positive_col),
+    ) +
+    theme_bw() +
+    theme(axis.text.x = element_text())
+  
+  print(p)
+  invisible(p)
+  
+  return(data_plot)
+}
+
+
+plot_age_seroprevalence_by_year_by_gender  <- function(data, positive_col) {
+  
+  # Recreate the filtered dataset used in the model
+  data_plot <- data
+  
+  # Filter to only Sex = 1 (Male) or 2 (Female)
+  data_plot <- data_plot[data_plot$Sex %in% c(1, 2), ]
+  
+  # Create sex labels (assuming 1 = Male, 2 = Female)
+  data_plot$sex_label <- factor(data_plot$Sex, 
+                                levels = c(1, 2), 
+                                labels = c("Male", "Female"))
+  
+  # Age groups
+  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
+  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
+  data_plot$age_group <- cut(
+    data_plot$AgeInYears,
+    breaks = age_breaks,
+    labels = age_labels,
+    include.lowest = TRUE,
+    right = FALSE
+  )
+  
+  formula_mean <- as.formula(paste(positive_col, "~ year_of_survey + age_group + sex_label"))
+  formula_length <- as.formula(paste(positive_col, "~ year_of_survey + age_group + sex_label"))
+  
+  # Summaries by year, age group, and sex
+  obs <- aggregate(formula_mean, data_plot, mean, na.rm = TRUE)
+  n_by <- aggregate(formula_length, data_plot, length)
+  names(n_by)[4] <- "n"
+  names(obs)[4] <- "proportion_positive"
+  
+  obs <- merge(obs, n_by, by = c("year_of_survey", "age_group", "sex_label"))
+  obs$obs_lower <- pmax(0, obs$proportion_positive - 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
+  obs$obs_upper <- pmin(1, obs$proportion_positive + 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
+  
+  y_limits <- if (positive_col == "CHIK_pos") {
+    c(0, 0.08)
+  } else {
+    c(0, 0.8)
+  }
+  
+  # Plot with sex differentiation
+  p <- ggplot() +
+    geom_point(data = obs, aes(x = age_group, y = proportion_positive, color = sex_label), 
+               size = 2, position = position_dodge(width = 0.5)) +
+    geom_errorbar(data = obs, aes(x = age_group, ymin = obs_lower, ymax = obs_upper, color = sex_label), 
+                  width = 0.15, position = position_dodge(width = 0.5)) +
+    
+    facet_wrap(~ year_of_survey, ncol = 5) +
+    scale_y_continuous(limits = y_limits) +
+    scale_color_manual(values = c("Male" = "#0f4c5c", "Female" = "#90a955")) +
+    labs(
+      x = "Age group",
+      y = "Proportion seropositive",
+      title = paste("Observed seroprevalence by age group and sex -", positive_col),
+      color = "Sex"
+    ) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)
+  invisible(p)
+  
+  return(data_plot)
+}
+
+
+
 
 # ---- Function for Year of Intro INLA models ----
 run_inla <- function(year_intro, data, cameroon, positive_col) {
@@ -369,132 +499,178 @@ run_inla_model_comparision <- function(year_intro, data, cameroon, anopheles_fun
 }
 
 
-# --- seroprevelance by age group by year obs data ---
-plot_age_seroprevalence_by_year <- function(data, positive_col) {
+
+# ---- Function to compare models ----
+compare_models <- function(year_intro, data, cameroon, anopheles_funestus, 
+                           anopheles_gambiae, cam_pop, positive_col) {
   
-  # Recreate the filtered dataset used in the model
-  data_plot <- data
+  models_to_test <- c("baseline", "anopheles_funestus", "anopheles_gambiae", 
+                      "anopheles_both")
   
-  # Age groups
-  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
-  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
-  data_plot$age_group <- cut(
-    data_plot$AgeInYears,
-    breaks = age_breaks,
-    labels = age_labels,
-    include.lowest = TRUE,
-    right = FALSE
-  )
+  results <- list()
   
-  # Create a formula dynamically using the positive_col parameter
-  formula_mean <- as.formula(paste(positive_col, "~ year_of_survey + age_group"))
-  formula_length <- as.formula(paste(positive_col, "~ year_of_survey + age_group"))
-  
-  # Summaries by year and age group
-  obs <- aggregate(formula_mean, data_plot, mean, na.rm = TRUE)
-  n_by <- aggregate(formula_length, data_plot, length)
-  names(n_by)[3] <- "n"
-  names(obs)[3] <- "proportion_positive"  # Rename for clarity
-  
-  obs <- merge(obs, n_by, by = c("year_of_survey", "age_group"))
-  obs$obs_lower <- pmax(0, obs$proportion_positive - 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
-  obs$obs_upper <- pmin(1, obs$proportion_positive + 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
-  
-  y_limits <- if (positive_col == "CHIK_pos") {
-    c(0, 0.08)
-  } else {
-    c(0, 0.8)
+  for (model_name in models_to_test) {
+    cat(paste0("Running model: ", model_name, " for year ", year_intro, "\n"))
+    
+    result <- tryCatch({
+      run_inla_model_comparision(
+        year_intro = year_intro, 
+        data = data, 
+        cameroon = cameroon,
+        anopheles_funestus = anopheles_funestus,
+        anopheles_gambiae = anopheles_gambiae,
+        cam_pop = cam_pop,
+        positive_col = positive_col, 
+        covariates = model_name)
+    }, error = function(e) {
+      warning(paste0("Model ", model_name, " failed: ", e$message))
+      return(NULL)
+    })
+    
+    if (!is.null(result)) {
+      results[[model_name]] <- result
+    }
   }
   
-  # Plot
-  p <- ggplot() +
-    geom_point(data = obs, aes(x = age_group, y = proportion_positive), size = 2, color = '#0d1b2a') +
-    geom_errorbar(data = obs, aes(x = age_group, ymin = obs_lower, ymax = obs_upper), width = 0.15, color = '#0d1b2a') +
+  # Check if we have any successful results
+  if (length(results) == 0) {
+    stop("All models failed to run. Check your data and model specifications.")
+  }
+  
+  # Extract comparison metrics
+  comparison_list <- list()
+  
+  for (model_name in names(results)) {
+    dic_val <- tryCatch({
+      results[[model_name]]$dic
+    }, error = function(e) NA)
     
-    facet_wrap(~ year_of_survey, ncol = 5) +
-
-    scale_y_continuous(limits = y_limits) +
-    labs(
-      x = "Age group",
-      y = "Proportion seropositive",
-      title = paste("Observed seroprevalence by age group -", positive_col),
-    ) +
-    theme_bw() +
-    theme(axis.text.x = element_text())
+    waic_val <- tryCatch({
+      results[[model_name]]$waic
+    }, error = function(e) NA)
+    
+    comparison_list[[model_name]] <- data.frame(
+      model = model_name,
+      dic = ifelse(is.null(dic_val), NA, dic_val),
+      waic = ifelse(is.null(waic_val), NA, waic_val),
+      stringsAsFactors = FALSE
+    )
+  }
   
-  print(p)
-  invisible(p)
+  # Combine into single dataframe
+  comparison_df <- do.call(rbind, comparison_list)
+  rownames(comparison_df) <- NULL
   
-  return(data_plot)
+  # Remove rows with NA DIC values
+  comparison_df <- comparison_df[!is.na(comparison_df$dic), ]
+  
+  # Check if we have any valid comparisons
+  if (nrow(comparison_df) == 0) {
+    warning("No models produced valid DIC values for comparison.")
+    return(list(results = results, comparison = NULL))
+  }
+  
+  # Add fixed effects summary
+  cat("\n=== Fixed Effects Summary ===\n")
+  for (model_name in names(results)) {
+    tryCatch({
+      fixed_effects <- results[[model_name]]$output$summary.fixed
+      if (nrow(fixed_effects) > 1) {  # More than just intercept
+        cat("\n", model_name, ":\n")
+        print(round(fixed_effects[, c("mean", "sd", "0.025quant", "0.975quant")], 4))
+      }
+    }, error = function(e) {
+      cat("\n", model_name, ": Could not extract fixed effects\n")
+    })
+  }
+  
+  # Rank models
+  comparison_df <- comparison_df[order(comparison_df$dic), ]
+  cat("\n=== Model Comparison (ranked by DIC) ===\n")
+  print(comparison_df)
+  
+  # Calculate DIC differences from best model
+  if (nrow(comparison_df) > 1) {
+    comparison_df$delta_dic <- comparison_df$dic - min(comparison_df$dic, na.rm = TRUE)
+    cat("\n=== DIC Differences from Best Model ===\n")
+    print(comparison_df[, c("model", "dic", "delta_dic")])
+  }
+  
+  return(list(results = results, comparison = comparison_df))
 }
 
 
-plot_age_seroprevalence_by_year_by_gender  <- function(data, positive_col) {
+                         
+plot_model_comparison <- function(model_comparison) {
   
-  # Recreate the filtered dataset used in the model
-  data_plot <- data
+  # Extract comparison dataframe
+  comparison_df <- model_comparison$comparison
   
-  # Filter to only Sex = 1 (Male) or 2 (Female)
-  data_plot <- data_plot[data_plot$Sex %in% c(1, 2), ]
-  
-  # Create sex labels (assuming 1 = Male, 2 = Female)
-  data_plot$sex_label <- factor(data_plot$Sex, 
-                                levels = c(1, 2), 
-                                labels = c("Male", "Female"))
-  
-  # Age groups
-  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
-  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
-  data_plot$age_group <- cut(
-    data_plot$AgeInYears,
-    breaks = age_breaks,
-    labels = age_labels,
-    include.lowest = TRUE,
-    right = FALSE
-  )
-  
-  formula_mean <- as.formula(paste(positive_col, "~ year_of_survey + age_group + sex_label"))
-  formula_length <- as.formula(paste(positive_col, "~ year_of_survey + age_group + sex_label"))
-  
-  # Summaries by year, age group, and sex
-  obs <- aggregate(formula_mean, data_plot, mean, na.rm = TRUE)
-  n_by <- aggregate(formula_length, data_plot, length)
-  names(n_by)[4] <- "n"
-  names(obs)[4] <- "proportion_positive"
-  
-  obs <- merge(obs, n_by, by = c("year_of_survey", "age_group", "sex_label"))
-  obs$obs_lower <- pmax(0, obs$proportion_positive - 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
-  obs$obs_upper <- pmin(1, obs$proportion_positive + 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
-  
-  y_limits <- if (positive_col == "CHIK_pos") {
-    c(0, 0.08)
-  } else {
-    c(0, 0.8)
+  if (is.null(comparison_df) || nrow(comparison_df) == 0) {
+    stop("No valid comparison data to plot")
   }
   
-  # Plot with sex differentiation
-  p <- ggplot() +
-    geom_point(data = obs, aes(x = age_group, y = proportion_positive, color = sex_label), 
-               size = 2, position = position_dodge(width = 0.5)) +
-    geom_errorbar(data = obs, aes(x = age_group, ymin = obs_lower, ymax = obs_upper, color = sex_label), 
-                  width = 0.15, position = position_dodge(width = 0.5)) +
+  # Order by DIC (best to worst)
+  comparison_df <- comparison_df[order(comparison_df$dic), ]
+  comparison_df$model <- factor(comparison_df$model, levels = comparison_df$model)
+  
+  # Create long format for both DIC and WAIC
+  if ("waic" %in% colnames(comparison_df)) {
+    comparison_long <- data.frame(
+      model = rep(comparison_df$model, 2),
+      metric = rep(c("DIC", "WAIC"), each = nrow(comparison_df)),
+      value = c(comparison_df$dic, comparison_df$waic)
+    )
     
-    facet_wrap(~ year_of_survey, ncol = 5) +
-    scale_y_continuous(limits = y_limits) +
-    scale_color_manual(values = c("Male" = "#0f4c5c", "Female" = "#90a955")) +
-    labs(
-      x = "Age group",
-      y = "Proportion seropositive",
-      title = paste("Observed seroprevalence by age group and sex -", positive_col),
-      color = "Sex"
-    ) +
-    theme_bw() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  
-  print(p)
-  invisible(p)
-  
-  return(data_plot)
+    # Find best model info
+    best_model <- as.character(comparison_df$model[1])
+    best_dic <- round(comparison_df$dic[1], 1)
+    
+    p <- ggplot(comparison_long, aes(x = model, y = value, color = metric, group = metric)) +
+      geom_line(linewidth = 0.8, alpha = 0.3) +
+      geom_point(size = 4, alpha = 0.8) +
+      scale_color_manual(
+        values = c("DIC" = "#2E86AB", "WAIC" = "#A23B72"),
+        labels = c("DIC", "WAIC")
+      ) +
+      labs(
+        title = "Model Comparison: Information Criteria",
+        subtitle = paste0("Best model: ", best_model, " (DIC = ", best_dic, ")"),
+        x = "Model",
+        y = "Information Criterion",
+        color = "Metric"
+      ) +
+      theme_minimal(base_size = 13) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 11),
+        axis.text.y = element_text(size = 11),
+        axis.title = element_text(size = 12, face = "bold"),
+        plot.title = element_text(face = "bold", size = 15, hjust = 0),
+        plot.subtitle = element_text(size = 11, color = "gray30", hjust = 0),
+        legend.position = "top",
+        legend.title = element_text(face = "bold", size = 11),
+        legend.text = element_text(size = 10),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        plot.background = element_rect(fill = "white", color = NA),
+        panel.border = element_rect(color = "gray80", fill = NA, linewidth = 0.5)
+      )
+    
+    print(p)
+    
+    # Print summary table
+    cat("\n=== Model Comparison Summary ===\n")
+    comparison_summary <- comparison_df[, c("model", "dic", "waic")]
+    if ("delta_dic" %in% colnames(comparison_df)) {
+      comparison_summary$delta_dic <- comparison_df$delta_dic
+    } else {
+      comparison_summary$delta_dic <- comparison_df$dic - min(comparison_df$dic)
+    }
+    print(round(comparison_summary, 2))
+    
+    return(p)
+  }
 }
 
 
