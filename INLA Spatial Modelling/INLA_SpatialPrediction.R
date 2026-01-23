@@ -29,9 +29,9 @@ model_comparison <- compare_models(
   year_intro = 1900,
   data = model_data,
   cameroon ,
-  anopheles_funestus,  # Add
-  anopheles_gambiae,    # Add
-  cam_pop,                        # Add
+  anopheles_funestus,  
+  anopheles_gambiae,   
+  cam_pop,     
   positive_col = "ONNV_pos"
 )
 
@@ -53,7 +53,7 @@ best_model <- run_inla_model_comparision(
 
 
 
-# --- get index of prediction and estimation stacks ---
+# --- index of prediction and estimation stacks ---
 index_pred_onnv <- inla.stack.index(best_model$stk.full, "pred")$data
 length(index_pred_onnv)
 index_est_onnv <- inla.stack.index(best_model$stk.full, "est")$data
@@ -76,7 +76,7 @@ extract_and_plot_foi <- function(model, coop, virus_name = "ONNV") {
     foi = lambda_pred
   )
   
-  # Convert to sf object for easier plotting
+  # Convert to sf object for plotting
   foi_sf <- st_as_sf(
     foi_df,
     coords = c("X", "Y"),
@@ -114,6 +114,7 @@ extract_and_plot_foi <- function(model, coop, virus_name = "ONNV") {
     plot = p
   ))
 }
+
 foi_onnv <- extract_and_plot_foi(best_model, best_model$coop, virus_name = "ONNV")
 
 
