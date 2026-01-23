@@ -6,17 +6,30 @@ nrow(meta_data)
 
 # Load shapefile
 cam_shapefile_districts <- read_sf('Caedistricts179_region.shp')
-# clean names + create lower case district column
+# Second shapefile used (to find remaining mismatched districts)
+cam_shapefile_districts2 <- read_sf('cmr_admin3.shp')
+
+# Load population rasters
+cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
+cam_pop_den <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_pd_2020_1km_UNadj.tif")
+
+# Load mosquito maps
+aegypti <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Aedes_maps_public/aegypti.tif')
+albopictus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Aedes_maps_public/albopictus.tif')
+anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_funestus_CMR.tiff')
+anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_gambiae_ss_CMR.tiff')
+
+
+
+
+# ---1) Match district names in data with shapefiles to extract geometry info for each district 
+
+# Clean names + create lower case district column
 cam_shapefile_districts$NAME2 <- gsub("DS_", "", cam_shapefile_districts$NAME2)
 cam_shapefile_districts <- cam_shapefile_districts %>%
   mutate(shapefile_district_lower = tolower(NAME2))
 
-# Second shapefile used (to find remaining mismatched districts)
-cam_shapefile_districts2 <- read_sf('cmr_admin3.shp')
-cam_shapefile_districts2 <- cam_shapefile_districts2 %>%
-  mutate(shapefile_district_lower2 = tolower(adm3_name1))
-
-# check how many names and districts 
+# Check how many names and districts 
 length(unique(cam_shapefile_districts$NAME2))
 length(unique(cam_shapefile_districts$geometry))
 
@@ -102,7 +115,12 @@ meta_data_cleaned <- meta_data %>%
   ))
 
 
+# Shapefile 2 since there are still districts in data missing from shapefile 1
+
 # Merge geometries in the second shapefile (in case it has duplicates too)
+cam_shapefile_districts2 <- cam_shapefile_districts2 %>%
+  mutate(shapefile_district_lower2 = tolower(adm3_name1))
+
 cam_shapefile_districts2_merged <- cam_shapefile_districts2 %>%
   group_by(shapefile_district_lower2) %>%
   summarise(
@@ -139,6 +157,7 @@ cam_shapefile_districts_unique <- cam_shapefile_districts_merged %>%
   slice(1) %>%  # Just take the first geometry for each district
   ungroup()
 
+
 # Join 
 meta_data_with_coords <- meta_data_cleaned %>%
   left_join(cam_shapefile_districts_unique, 
@@ -165,6 +184,29 @@ ggplot(sf_meta_data_with_coords) +
   geom_sf() +
   geom_sf_text(aes(label = district_lower), size = 2, check_overlap = TRUE) +
   theme_minimal()
+
+
+
+
+
+# --- 2) Population-Weighted Centroids 
+# Calculates the geographic center of each district weighted by where people actually live,
+# rather than the simple geometric cente
+
+
+
+
+
+
+
+
+# --- 3) Population-Weighted Mosquito Value
+# Calculates the average mosquito density (Aedes aegypti, Aedes albopictus, Anopheles funestus, Anopheles gambiae) experienced by the population in each district. 
+# Each raster cell's mosquito value is weighted by the number of people living in that cell, then averaged across the district. 
+# This represents the district-wide mosquito exposure of the population, accounting for both spatial variation in mosquito density and population distribution.
+
+
+
 
 # Save files with coords for downstream analysis
 saveRDS(meta_data_with_coords, 'meta_data_with_coords.rds')
