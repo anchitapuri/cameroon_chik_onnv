@@ -1,4 +1,4 @@
-source(here('~/Desktop/Cameroon_Analysis_2025/Functions.R'))
+source(here('Functions.R'))
 
 # read data files with labels 
 meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/final_meta_data_with_labels.csv')
