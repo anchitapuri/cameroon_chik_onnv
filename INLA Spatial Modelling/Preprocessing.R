@@ -1,7 +1,8 @@
 source(here('Functions.R'))
 
+
 # read data files with labels 
-meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/final_meta_data_with_labels.csv')
+meta_data <- read.csv('final_meta_data_with_labels.csv')
 nrow(meta_data)
 
 # Load shapefile
@@ -21,7 +22,7 @@ anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Ano
 
 
 
-# ---1) Match district names in data with shapefiles to extract geometry info for each district 
+# ---1) Match district names in data with shapefiles to extract geometry for each district 
 # Clean names + create lower case district column
 cam_shapefile_districts$NAME2 <- gsub("DS_", "", cam_shapefile_districts$NAME2)
 cam_shapefile_districts <- cam_shapefile_districts %>%
@@ -49,11 +50,9 @@ manoka_merged <- cam_shapefile_districts %>%
     shapefile_district_lower = first(shapefile_district_lower),
     geometry = st_union(geometry)
   )
-
-# Keep all other districts as-is
+# Keep all other districts 
 other_districts <- cam_shapefile_districts %>%
   filter(shapefile_district_lower != "manoka")
-
 # Combine
 cam_shapefile_districts_merged <- bind_rows(other_districts, manoka_merged)
 
@@ -113,7 +112,7 @@ meta_data_cleaned <- meta_data %>%
   ))
 
 
-# Shapefile 2 since there are still districts in data missing from shapefile 1
+# Use hapefile 2 since there are still districts in data missing from shapefile 1
 # Merge geometries in the second shapefile (in case it has duplicates too)
 cam_shapefile_districts2 <- cam_shapefile_districts2 %>%
   mutate(shapefile_district_lower2 = tolower(adm3_name1))
@@ -211,7 +210,7 @@ area_rast_pop <- terra::cellSize(cam_pop, unit = "km")
 cam_stack_pop <- c(cam_pop, area_rast_pop)
 names(cam_stack_pop) <- c("population_per_pixel", "cell_area")
 
-# Function to  Calculate population-weighted centroid
+# Function to calculate population-weighted centroid
 pop_weighted_centroid <- function(df, ...) {
   pop_per_cell <- df$population_per_pixel * df$coverage_fraction
   total_pop <- sum(pop_per_cell, na.rm = TRUE)
