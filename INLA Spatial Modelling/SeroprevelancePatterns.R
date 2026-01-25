@@ -6,7 +6,7 @@ source(here('Functions.R'))
 
 
 # Load data with pop weighted coords (post preprocessing) 
-cameroon_data <- readRDS('sf_meta_data_with_coords_pw .rds')
+cameroon_data <- readRDS('sf_meta_data_with_coords_pw.rds')
 nrow(meta_data_with_coords)
 length(unique(cameroon_data$Sample))
 cameroon_data <- cameroon_data[!duplicated(cameroon_data$Sample), ]
