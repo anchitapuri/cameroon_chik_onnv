@@ -78,8 +78,8 @@ prepare_multiplex_sero_data <- function(
   ))
 }
 
-# ---- Build data for inputting into stan model  
-prepare_multiplex_sero_data_fixed_params <- function(
+# ---- Build data for inputting into stan model 
+prepare_multiplex_sero_data <- function(
     data,
     pathogens,
     present_pathogens) {
@@ -131,13 +131,6 @@ prepare_multiplex_sero_data_fixed_params <- function(
   stan_data$wpos <- wpos  # index pos pathogens per infection status
   stan_data$wneg <- wneg  # index neg pathogens per infection status
   
-  #stan_data$sero_fixed = c(0.3, 0.7)  # CHIKV ~20%, ONNV ~70%, MAYV ~50%
-  #stan_data$mu0_fixed <- c(6, 4.8, 6)
-  
-  # assuming ONNV is first (60%) and then CHIKV ~20%
-  stan_data$sero_fixed = c(0.25, 0.15)  
-  #stan_data$mu1_fixed <- c(2, 2.5)
-  
   # Return list with data and model
   return(list(
     data = stan_data,
@@ -147,33 +140,19 @@ prepare_multiplex_sero_data_fixed_params <- function(
 
 #--- chain starting values
 init <- function(data, nChains){
-  ii <- vector("list", nChains)
+  ii <- init <- list()
   for(i in 1:nChains){
-    ii[[i]] <- list(
-      sero = c(
-        runif(1, 0.22, 0.28),
-        runif(1, 0.12, 0.18)
-      ),
-      mu0 = c(
-        runif(1, 4.3, 5.0),
-        runif(1, 6.0, 6.8),
-        runif(1, 5.7, 6.4)
-      ),
-      mu1 = c(
-        runif(1, 1.8, 2.2),
-        runif(1, 2.7, 3.3)
-      ),
-      sd0 = c(
-        runif(1, 0.75, 1.00),  # ONNV - narrower
-        runif(1, 0.50, 0.60),  # CHIK - narrower
-        runif(1, 1.10, 1.30)   # MAYV - wider
-      ),
-      sd1 = runif(1, 0.25, 0.45),
-      phi = runif((data$nP * data$nPp - data$nPp), 0.3, 0.7),
-      rho00 = runif(1, 0.25, 0.35)
-    )
-  }
-  ii
+    init$sero <- array(runif(data$nPp, 0.2, 0.8))
+    init$sd0 <- runif(data$nP, 0.4, 0.8)
+    init$sd1 <- runif(1, 0.3, 0.6)
+    init$mu0 <- runif(data$nP, 3, 5)
+    init$mu1 <- runif(data$nPp, 1.5, 4.5)
+    init$phi <- runif((data$nP * data$nPp - (data$nPp)), 0.01, 0.5)
+    init$rho00 <- runif(1, 0.4, 0.7)
+    ii[[i]] <- init
+  } 
+  
+  return(ii)
 }
 
 
@@ -214,7 +193,7 @@ extract_covM <- function(chains, data){
 
 
 #----- Plot gaussian distribution fits
-plot_dists_neg_CR_pos <- function(chains, data, pathogens, show_crossreactive_for = NULL){
+plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
   
   iter <- length(chains$lp__)
   covM <- extract_covM(chains, data)
