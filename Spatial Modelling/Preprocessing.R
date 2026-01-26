@@ -11,14 +11,14 @@ cam_shapefile_districts <- read_sf('Caedistricts179_region.shp')
 cam_shapefile_districts2 <- read_sf('cmr_admin3.shp')
 
 # Load population rasters
-cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
-cam_pop_den <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_pd_2020_1km_UNadj.tif")
+cam_pop <- rast("cmr_ppp_2020_UNadj.tif")
+cam_pop_den <- rast("cmr_pd_2020_1km_UNadj.tif")
 
 # Load mosquito maps
-aegypti <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Aedes_maps_public/aegypti.tif')
-albopictus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Aedes_maps_public/albopictus.tif')
-anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_funestus_CMR.tiff')
-anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_gambiae_ss_CMR.tiff')
+aegypti <- rast('Aedes_maps_public/aegypti.tif')
+albopictus <- rast('Aedes_maps_public/albopictus.tif')
+anopheles_funestus <- rast('2010_Anopheles_funestus_CMR.tiff')
+anopheles_gambiae <- rast('2010_Anopheles_gambiae_ss_CMR.tiff')
 
 
 
