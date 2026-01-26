@@ -16,8 +16,8 @@ unique(cameroon_data$year_of_survey)
 
 
 # Load population rasters
-cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
-cam_pop_den <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_pd_2020_1km_UNadj.tif")
+cam_pop <- rast("mr_ppp_2020_UNadj.tif")
+cam_pop_den <- rast("cmr_pd_2020_1km_UNadj.tif")
 
 # ---  Add UTM coordinates
 sp_vill <- SpatialPoints(cbind(cameroon_data$Longitude, cameroon_data$Latitude))
