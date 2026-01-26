@@ -35,7 +35,7 @@ colnames(coords_utm) <- c("Easting", "Northing")
 cameroon_data$Easting <- coords_utm[, "Easting"]
 cameroon_data$Northing <- coords_utm[, "Northing"]
 
-# Extract population density values at district lat / long 
+# Extract population density values at lat / long 
 density_values <- terra::extract(cam_pop_den, points_to_extract)
 cameroon_data$pop_density <- density_values[, 2]
 cameroon_data$logpopden <- log(cameroon_data$pop_density, 10)
@@ -47,7 +47,7 @@ N <- nrow(cameroon_data)
 # ---- RUN FUNCTIONS + PLOTS ----
 
 # 1) --- Prevelance by district 
-# CHIK: very few infections (n=28) 
+# CHIK: very few positives (n=28) 
 # Check where CHIK infection fall within cameroon (coloured by Aedes Aegypti proportion) 
 chik_pos <- cameroon_data |>
   dplyr::filter(CHIK_pos == 1)
