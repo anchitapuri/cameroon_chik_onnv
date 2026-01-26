@@ -19,12 +19,14 @@ cameroon_age_2025 <- read.csv('CameroonAge2025.csv')
 cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
 
-# ----- 
+# ----- Read preprocessed data with coords 
 cameroon_data <- readRDS('sf_meta_data_with_coords_pw.rds')
 nrow(cameroon_data)
+model_data <- cameroon_data
 
 
-# --- Compare models with difference covariates ----
+
+# --- Compare models with difference covariates 
 model_comparison <- compare_models(
   year_intro = 1900,
   data = model_data,
@@ -39,7 +41,7 @@ model_comparison <- compare_models(
 plot_model_comparison(model_comparison$comparison)
 
 
-# Run best model (with best covariate/s)
+# Run best model (ie with best covariate/s)
 best_model <- run_inla_model_comparision(
   year_intro = 1900,
   data = model_data,
@@ -52,7 +54,7 @@ best_model <- run_inla_model_comparision(
 
 
 
-# --- index of prediction and estimation stacks ---
+# --- Index of prediction and estimation stacks 
 index_pred_onnv <- inla.stack.index(best_model$stk.full, "pred")$data
 length(index_pred_onnv)
 index_est_onnv <- inla.stack.index(best_model$stk.full, "est")$data
@@ -82,10 +84,10 @@ sero_onnv <- plot_predicted_seroprevalence(
 
 
                          
-# --- MODEL FITS ---- 
+# --- Model fits 
 plot_age_seroprevalence_model_fits(best_model$year,best_model, model_data, "ONNV_pos")
 
 
                          
-# --- Save best model results ----
+# --- Save best model results 
 saveRDS(best_model, 'ONNV_INLAResults.rds', compress = "gzip")
