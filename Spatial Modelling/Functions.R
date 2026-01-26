@@ -653,7 +653,135 @@ plot_model_comparison <- function(comparison_df) {
 }
 
 
-# --- seroprevalence by age group by year - model fits ---
+# --- Function to extract and plot FOI ---
+extract_and_plot_foi <- function(model, coop, pathogen_name = "ONNV") {
+  
+  # Get prediction indices
+  index_pred <- inla.stack.index(best_model$stk.full, tag = "pred")$data
+  
+  # Extract the intercept
+  eta_pred <- best_model$output$summary.linear.predictor[index_pred, "mean"]
+  lambda_pred <- exp(eta_pred)
+  
+  # Create dataframe with UTM coordinates (km -> m)
+  foi_df <- data.frame(
+    X = coop[, "X"] * 1000,
+    Y = coop[, "Y"] * 1000,
+    foi = lambda_pred
+  )
+  
+  # Convert to sf object for plotting
+  foi_sf <- st_as_sf(
+    foi_df,
+    coords = c("X", "Y"),
+    crs = 32633  # UTM Zone 33N
+  )
+  
+  # Add FOI values to the sf object
+  foi_sf$foi <- foi_df$foi
+  
+  # Plot
+  p <- ggplot() +
+    geom_sf(
+      data = foi_sf, aes(color = foi), size = 1.7, alpha = 1) +
+    scale_color_viridis(
+      option = "mako",
+      name = "FOI (λ)",
+      limits = c(0, max(foi_sf$foi))) +
+    labs(
+      title = paste0("Force of Infection (FOI) Predictions - ", pathogen_name),
+      x = "Longitude",
+      y = "Latitude"
+    ) +
+    theme_minimal() + 
+    theme(
+      legend.position = "right",
+      plot.title = element_text(size = 14, face = "bold")
+    )
+  
+  print(p)
+  
+  # Return foi_sf and plot invisibly
+  invisible(list(
+    foi_sf = foi_sf,
+    foi_df = foi_df,
+    plot = p
+  ))
+}
+
+
+# --- Function to extract and plot seroprevelance ---
+plot_predicted_seroprevalence <- function(foi_result,age_mid, age_weights,
+                                          crs = 32633, pathogen_name = "ONNV") {
+  
+  # Calculate probability matrix
+  prob_mat <- outer(
+    foi_result$foi_sf$foi,
+    age_mid,
+    function(lambda, a) 1 - exp(-lambda * a)
+  )
+  
+  # Age weighted prevalence at each location
+  prev_loc <- as.vector(prob_mat %*% age_weights)
+  
+  # Create dataframe with prediction coordinates
+  prev_df <- data.frame(
+    X_km = foi_result$coop[, "X"],
+    Y_km = foi_result$coop[, "Y"],
+    prev = prev_loc
+  )
+  
+  # Convert to sf object (convert km back to meters for proper CRS)
+  prev_sf <- st_as_sf(
+    data.frame(X = prev_df$X_km * 1000, Y = prev_df$Y_km * 1000),
+    coords = c("X", "Y"),
+    crs = 32633
+  )
+  
+  # Add prevalence values to sf object
+  prev_sf$prev <- prev_df$prev
+  
+  # Create subtitle if not provided
+  if (is.null(subtitle)) {
+    subtitle <- paste("Introduction year:", foi_result$year)
+  }
+  
+  # Plot
+  p <- ggplot() +
+    geom_sf(data = prev_sf, aes(color = prev), size = 1.7, alpha = 1, shape = 15) +
+    scale_color_viridis_c(
+      option = "mako",
+      name = "Seroprevalence",
+      limits = c(0, max(prev_sf$prev, na.rm = TRUE)),
+      labels = scales::percent_format(accuracy = 1)
+    ) +
+    labs(
+      title = paste0("Predicted Seroprevalence -", pathogen_name),
+      x = "Longitude",
+      y = "Latitude"
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "right",
+      plot.title = element_text(size = 14, face = "bold"),
+      plot.subtitle = element_text(size = 11)
+    )
+  
+  print(p)
+  
+  # Return both the plot and the prevalence data
+  return(list(
+    plot = p,
+    prev_sf = prev_sf,
+    prev_range = range(prev_loc)
+  ))
+}
+
+
+
+
+
+# --- Seroprevalence by age group by year - model fits ---
 plot_age_seroprevalence_model_fits <- function(year_intro,
                                                result,
                                                data,
