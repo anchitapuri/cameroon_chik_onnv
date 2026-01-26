@@ -9,13 +9,13 @@ source(here('Functions.R'))
 cameroon <- ne_countries(country = "Cameroon", returnclass = "sf")
 
 # Population and mosquito rasts
-anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_funestus_CMR.tiff')
-anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_gambiae_ss_CMR.tiff')
-cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
+anopheles_funestus <- rast('2010_Anopheles_funestus_CMR.tiff')
+anopheles_gambiae <- rast('2010_Anopheles_gambiae_ss_CMR.tiff')
+cam_pop <- rast("cmr_ppp_2020_UNadj.tif")
 
 
 # Cameroon population by age
-cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/CameroonAge2025.csv')
+cameroon_age_2025 <- read.csv('CameroonAge2025.csv')
 cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
 
@@ -35,8 +35,9 @@ model_comparison <- compare_models(
   positive_col = "ONNV_pos"
 )
 
+
 # Plot DIC and WAIC to compare models                          
-plot_model_comparison(model_comparison)
+plot_model_comparison(model_comparison$comparison)
 
 
 # Run best model 
@@ -59,62 +60,8 @@ length(index_pred_onnv)
 index_est_onnv <- inla.stack.index(best_model$stk.full, "est")$data
 length(index_est_onnv)
 
-# --- Function to extract and plot FOI ---
-extract_and_plot_foi <- function(model, coop, virus_name = "ONNV") {
-  
-  # Get prediction indices
-  index_pred <- inla.stack.index(best_model$stk.full, tag = "pred")$data
-  
-  # Extract the intercept
-  intercept_values <- best_model$output$summary.linear.predictor[index_pred, "mean"]
-  lambda_pred <- exp(intercept_values)
-  
-  # Create dataframe with UTM coordinates (km -> m)
-  foi_df <- data.frame(
-    X = coop[, "X"] * 1000,
-    Y = coop[, "Y"] * 1000,
-    foi = lambda_pred
-  )
-  
-  # Convert to sf object for plotting
-  foi_sf <- st_as_sf(
-    foi_df,
-    coords = c("X", "Y"),
-    crs = 32633  # UTM Zone 33N
-  )
-  
-  # Add FOI values to the sf object
-  foi_sf$foi <- foi_df$foi
-  
-  # Plot
-  p <- ggplot() +
-    geom_sf(
-      data = foi_sf, aes(color = foi), size = 1.7, alpha = 1) +
-    scale_color_viridis(
-      option = "mako",
-      name = "FOI (λ)",
-      limits = c(0, max(foi_sf$foi))) +
-    labs(
-      title = paste0("Force of Infection (FOI) Predictions - ", virus_name),
-      x = "Longitude",
-      y = "Latitude"
-    ) +
-    theme_minimal() + 
-    theme(
-      legend.position = "right",
-      plot.title = element_text(size = 14, face = "bold")
-    )
-  
-  print(p)
-  
-  # Return foi_sf and plot invisibly
-  invisible(list(
-    foi_sf = foi_sf,
-    foi_df = foi_df,
-    plot = p
-  ))
-}
 
+# --- Extract and plot FOI
 foi_onnv <- extract_and_plot_foi(best_model, best_model$coop, virus_name = "ONNV")
 
 
