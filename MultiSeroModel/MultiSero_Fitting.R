@@ -60,7 +60,7 @@ nrow(meta_data_alpha)
 # pathogen names for the model (circulating pathogens first)
 pathogens = c("ONNV_VLP_log","CHIKV_sE2_log","MAYV_E2_log")
 
-# run with all three 
+# prepare data for stan
 preprocessed_data <- prepare_multiplex_sero_data(
   data = meta_data_alpha,
   pathogens = pathogens,
@@ -81,7 +81,7 @@ init = ini,
 save_cmdstan_config=TRUE
 )
 
-#saveRDS(fit, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/16thDEC_CHIK+ONNV_MultiSeroFit.rds')
+#save fits
 fit$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/final_model_fits.rds')
 
 # extract chains
@@ -99,7 +99,7 @@ print(p1 + p2 + p3 + p4)
 
 # Plot fits (neg component, neg-CR component, pos component)
 # Show cross-reactive negatives only for CHIK (pathogen 2)
-distfits <- plot_dists_neg_CR_pos(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens,
+distfits <- plot_fits(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens,
                                       show_crossreactive_for = 2)
 distfits$fit
 distfits$fitPN
