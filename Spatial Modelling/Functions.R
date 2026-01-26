@@ -1,5 +1,5 @@
 
-# --- SEROPOSITIVITY BY DISTRICT
+# --- Seropositivity by district
 calculate_district_prevalence <- function(data, positive_col) {
   data %>%
     group_by(district_lower) %>%
@@ -11,7 +11,7 @@ calculate_district_prevalence <- function(data, positive_col) {
     )
 }
 
-# --- ODDS RATIO ANALYSIS (FUNCTION)
+# --- Odds Ratio
 calculate_odds_ratio <- function(data, positive_col, n_iter = 100) {
   
   N <- nrow(data)
@@ -91,7 +91,7 @@ calculate_odds_ratio <- function(data, positive_col, n_iter = 100) {
   )
 }
 
-# --- PROP POS BY MOSQUITO + LOG POP DENSITY 
+# --- Propotion by mosquito distribution + log population 
 calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, breaks_min) {
   var_mid <- rep(NaN, length(breaks_max))
   prop_pos <- matrix(NaN, length(breaks_max), 3)
@@ -171,7 +171,7 @@ plot_age_seroprevalence_by_year <- function(data, positive_col) {
   print(p)
   invisible(p)
   
-  return(data_plot)
+  return()
 }
 
 
@@ -240,9 +240,8 @@ plot_age_seroprevalence_by_year_by_gender  <- function(data, positive_col) {
   print(p)
   invisible(p)
   
-  return(data_plot)
+  return()
 }
-
 
 
 
@@ -280,14 +279,12 @@ run_inla <- function(year_intro, data, cameroon, positive_col) {
   )
   
   # Prediction Grid
-  grid <- st_make_grid(cameroon, cellsize = 0.05, what = "centers")
-  grid_sf   <- st_sf(grid_id = seq_along(grid), geometry = grid)
+  grid        <- st_make_grid(cameroon, cellsize = 0.05, what = "centers")
+  grid_sf     <- st_sf(grid_id = seq_along(grid), geometry = grid)
   grid_inside <- st_intersection(grid_sf, cameroon)
-  grid_inside <- grid_inside[order(grid_inside$grid_id), ]   # restore original order
-  
-  # Project to appropriate CRS (UTM Zone 33N for Cameroon)
-  grid_utm <- st_transform(grid_inside, crs = 32633)
-  coop_utm <- st_coordinates(grid_utm)
+  grid_inside <- grid_inside[order(grid_inside$grid_id), ]  
+  grid_utm    <- st_transform(grid_inside, crs = 32633)
+  coop_utm    <- st_coordinates(grid_utm)
   # For INLA - convert to km (INLA works better with smaller numbers)
   coop <- coop_utm / 1000
   colnames(coop) <- c("X", "Y")
@@ -302,7 +299,6 @@ run_inla <- function(year_intro, data, cameroon, positive_col) {
   
   # Estimation stack - USE THE INPUT PARAMETER
   stk.e <- inla.stack(
-    #data = list(y = 1 * data_points[[positive_col]]),  
     data = list(y = data_points[[positive_col]]),  
     A = list(1, A),
     effects = list(data.frame(Intercept = 1, age = data_points$years_of_exposure),
@@ -352,14 +348,9 @@ run_inla_model_comparision <- function(year_intro, data, cameroon, anopheles_fun
   data$age_intro <- data$year_of_survey - year_intro
   data$years_of_exposure <- pmin(data$age_intro, data$AgeInYears)
   
+  # Remove negative or zero years of exposure
   data <- data[!is.na(data$years_of_exposure) & data$years_of_exposure > 0, ]
-  
-  # Check if we have enough data
-  if (nrow(data) < 50) {
-    warning(paste0("Year ", year_intro, " has too few valid observations (", nrow(data), "). Skipping."))
-    return(NULL)
-  }
-  
+  # Make geometry valid
   data_points <- data %>%
     st_drop_geometry() %>%
     filter(!is.na("Easting") & !is.na("Northing")) 
@@ -393,8 +384,8 @@ run_inla_model_comparision <- function(year_intro, data, cameroon, anopheles_fun
   funestus_values <- extract(anopheles_funestus, vect(grid_inside), method = "bilinear")
   gambiae_values <- extract(anopheles_gambiae, vect(grid_inside), method = "bilinear")
 
-  # create coop dataframe and add covariates 
-  dp <- as.data.frame(coop)
+  # covert coop to dataframe and add covariates 
+  dp  <- as.data.frame(coop)
   dp$funestus <- funestus_values$`2010_Anopheles_funestus_CMR`
   dp$gambiae  <- gambiae_values$`2010_Anopheles_gambiae_ss_CMR`
   dp$pop     <- pop_values$cmr_ppp_2020_UNadj
@@ -502,14 +493,26 @@ run_inla_model_comparision <- function(year_intro, data, cameroon, anopheles_fun
 
 # ---- Function to compare models ----
 compare_models <- function(year_intro, data, cameroon, anopheles_funestus, 
-                           anopheles_gambiae, cam_pop, positive_col) {
+                           anopheles_gambiae, positive_col, covariates_to_test = NULL) {
   
-  models_to_test <- c("baseline", "anopheles_funestus", "anopheles_gambiae", 
-                      "anopheles_both")
+  
+  # Default covariate combinations if none specified
+  if (is.null(covariates_to_test)) {
+    covariates_to_test <- c("baseline", "anopheles_funestus", "anopheles_gambiae", 
+                            "anopheles_both")
+  }
+   valid_covariates <- c("baseline", "anopheles_funestus", "anopheles_gambiae", 
+                        "anopheles_both")
+
+  invalid <- setdiff(covariates_to_test, valid_covariates)
+  if (length(invalid) > 0) {
+    stop(paste("Invalid covariate(s):", paste(invalid, collapse = ", "), 
+               "\nValid options are:", paste(valid_covariates, collapse = ", ")))
+  }                     
   
   results <- list()
   
-  for (model_name in models_to_test) {
+  for (model_name in covariates_to_test) {
     cat(paste0("Running model: ", model_name, " for year ", year_intro, "\n"))
     
     result <- tryCatch({
@@ -519,7 +522,6 @@ compare_models <- function(year_intro, data, cameroon, anopheles_funestus,
         cameroon = cameroon,
         anopheles_funestus = anopheles_funestus,
         anopheles_gambiae = anopheles_gambiae,
-        cam_pop = cam_pop,
         positive_col = positive_col, 
         covariates = model_name)
     }, error = function(e) {
@@ -561,50 +563,27 @@ compare_models <- function(year_intro, data, cameroon, anopheles_funestus,
   comparison_df <- do.call(rbind, comparison_list)
   rownames(comparison_df) <- NULL
   
-  # Remove rows with NA DIC values
-  comparison_df <- comparison_df[!is.na(comparison_df$dic), ]
   
   # Check if we have any valid comparisons
   if (nrow(comparison_df) == 0) {
     warning("No models produced valid DIC values for comparison.")
     return(list(results = results, comparison = NULL))
   }
-  
-  # Add fixed effects summary
-  cat("\n=== Fixed Effects Summary ===\n")
-  for (model_name in names(results)) {
-    tryCatch({
-      fixed_effects <- results[[model_name]]$output$summary.fixed
-      if (nrow(fixed_effects) > 1) {  # More than just intercept
-        cat("\n", model_name, ":\n")
-        print(round(fixed_effects[, c("mean", "sd", "0.025quant", "0.975quant")], 4))
-      }
-    }, error = function(e) {
-      cat("\n", model_name, ": Could not extract fixed effects\n")
-    })
-  }
+
   
   # Rank models
   comparison_df <- comparison_df[order(comparison_df$dic), ]
   cat("\n=== Model Comparison (ranked by DIC) ===\n")
   print(comparison_df)
   
-  # Calculate DIC differences from best model
-  if (nrow(comparison_df) > 1) {
-    comparison_df$delta_dic <- comparison_df$dic - min(comparison_df$dic, na.rm = TRUE)
-    cat("\n=== DIC Differences from Best Model ===\n")
-    print(comparison_df[, c("model", "dic", "delta_dic")])
-  }
   
   return(list(results = results, comparison = comparison_df))
 }
 
 
                          
-plot_model_comparison <- function(model_comparison) {
+plot_model_comparison <- function(comparison_df) {
   
-  # Extract comparison dataframe
-  comparison_df <- model_comparison$comparison
   
   if (is.null(comparison_df) || nrow(comparison_df) == 0) {
     stop("No valid comparison data to plot")
