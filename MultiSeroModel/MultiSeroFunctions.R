@@ -78,65 +78,7 @@ prepare_multiplex_sero_data <- function(
   ))
 }
 
-# ---- Build data for inputting into stan model 
-prepare_multiplex_sero_data <- function(
-    data,
-    pathogens,
-    present_pathogens) {
-  
-  # Validate inputs
-  if (!all(present_pathogens %in% pathogens)) {
-    stop("All present_pathogens must be in the pathogens list")
-  }
-  
-  # Reorder pathogens (present first, then non-present)
-  nonpres <- pathogens[!pathogens %in% present_pathogens]
-  pathogens_ordered <- c(present_pathogens, nonpres)
-  
-  # Compile data for model fitting
-  stan_data <- list()
-  
-  # Antibody titer data (log-transformed)
-  stan_data$y <- cbind(data[, c(present_pathogens, nonpres)])
-  stan_data$y <- stan_data$y
-  
-  # Pathogen presence indicators
-  stan_data$pres <- c(rep(1, length(present_pathogens)), rep(0, length(nonpres)))
-  
-  # Basic dimensions
-  stan_data$N <- nrow(stan_data$y)
-  stan_data$nP <- ncol(stan_data$y)
-  stan_data$nPp <- sum(stan_data$pres)
-  
-  # Infection matrix and related variables
-  stan_data$infM <- inf_matrix(stan_data$nP, pres = stan_data$pres)
-  stan_data$nC <- nrow(stan_data$infM)
-  
-  # Create indexes for model fitting
-  npos <- rowSums(stan_data$infM)
-  wpos <- wneg <- matrix(0, ncol = stan_data$nP, nrow = stan_data$nC)
-  
-  for (c in 1:nrow(stan_data$infM)) {
-    for (p in 1:stan_data$nP) {
-      if (npos[c] > 0) {
-        wpos[c, 1:npos[c]] <- which(stan_data$infM[c, ] == 1)
-      }
-      if (npos[c] < stan_data$nP) {
-        wneg[c, 1:(stan_data$nP - npos[c])] <- which(stan_data$infM[c, ] == 0)
-      }
-    }
-  }
-  
-  stan_data$npos <- npos  # N pos pathogens per infection status
-  stan_data$wpos <- wpos  # index pos pathogens per infection status
-  stan_data$wneg <- wneg  # index neg pathogens per infection status
-  
-  # Return list with data and model
-  return(list(
-    data = stan_data,
-    pathogens = pathogens_ordered
-  ))
-}
+
 
 #--- chain starting values
 init <- function(data, nChains){
