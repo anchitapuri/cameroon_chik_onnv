@@ -29,7 +29,7 @@ check_cmdstan_toolchain()
 cmdstan_path <- "/Users/ap2488/.cmdstan/cmdstan-2.36.0"
 set_cmdstan_path(cmdstan_path)
 
-# compile model
+# Compile model
 model_path = "/Users/ap2488/Desktop/Cameroon_Analysis_2025/Final_MultiSero.stan"
 mod = cmdstan_model(model_path_final, pedantic=FALSE)
 
