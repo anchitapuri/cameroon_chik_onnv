@@ -24,30 +24,28 @@ cameroon_data <- readRDS('sf_meta_data_with_coords_pw.rds')
 nrow(cameroon_data)
 
 
-# --- Compare models with difference covariates ----                       
+# --- Compare models with difference covariates ----
 model_comparison <- compare_models(
   year_intro = 1900,
   data = model_data,
-  cameroon ,
-  anopheles_funestus,  
-  anopheles_gambiae,   
-  cam_pop,     
+  cameroon,
+  anopheles_funestus,
+  anopheles_gambiae, 
   positive_col = "ONNV_pos"
 )
 
 
-# Plot DIC and WAIC to compare models                          
+# Plot DIC and WAIC to compare models 
 plot_model_comparison(model_comparison$comparison)
 
 
-# Run best model 
+# Run best model (with best covariate/s)
 best_model <- run_inla_model_comparision(
   year_intro = 1900,
   data = model_data,
   cameroon = cameroon,
   anopheles_funestus = anopheles_funestus,  
-  anopheles_gambiae = anopheles_gambiae,    
-  cam_pop = cam_pop,                        
+  anopheles_gambiae = anopheles_gambiae,
   positive_col = "ONNV_pos",
   covariates = "baseline"
 )
@@ -62,7 +60,7 @@ length(index_est_onnv)
 
 
 # --- Extract and plot FOI
-foi_onnv <- extract_and_plot_foi(best_model, best_model$coop, virus_name = "ONNV")
+foi_onnv <- extract_and_plot_foi(best_model, best_model$coop, pathogen_name = "ONNV")
 
 
 # --- Prob of seropositive proportion 
@@ -75,61 +73,19 @@ age_mid <- c(
 cameroon_age_2025$total
 w_age <- cameroon_age_2025$total / sum(cameroon_age_2025$total)
 
-
-
-prob_mat <- outer(
-  foi_onnv$foi_sf$foi,
-  age_mid,
-  function(lambda, a) 1 - exp(-lambda * a)
+sero_onnv <- plot_predicted_seroprevalence(
+  foi_result = foi_onnv,
+  age_mid = age_mid,
+  age_weights = w_age,
+  pathogen_name = "ONNV"
 )
-#Age weighted prevalence at each location
-prev_loc <- as.vector(prob_mat %*% w_age)   # length n_loc
-range(prev_loc)
-# Create dataframe with prediction coordinates
-prev_df <- data.frame(
-  X_km = best_model$coop[, "X"],
-  Y_km = best_model$coop[, "Y"],
-  prev = prev_loc
-)
-# Convert to sf object (convert km back to meters for proper CRS)
-prev_sf <- st_as_sf(
-  data.frame(X = prev_df$X_km * 1000, Y = prev_df$Y_km * 1000),
-  coords = c("X", "Y"),
-  crs = 32633  # UTM Zone 33N
-)
-# Add prevalence values to sf object
-prev_sf$prev <- prev_df$prev
-# Plot
-ggplot() +
-  geom_sf(data = prev_sf, aes(color = prev),size = 1.7, alpha = 1, shape = 15) +
-  scale_color_viridis_c(
-    option = "mako",
-    name = "Seroprevalence",
-    limits = c(0, max(prev_sf$prev, na.rm = TRUE)),
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  labs(
-    title = "Predicted Seroprevalence",
-    subtitle = paste("Introduction year:", best_model$year),
-    x = "Longitude",
-    y = "Latitude"
-  ) +
-  theme_minimal() +
-  theme(
-    legend.position = "right",
-    plot.title = element_text(size = 14, face = "bold"),
-    plot.subtitle = element_text(size = 11)
-  )
-
 
 
                          
 # --- MODEL FITS ---- 
-plot_age_seroprevalence_model_fits( est_model$year,best_model, model_data, "ONNV_pos")
+plot_age_seroprevalence_model_fits(best_model$year,best_model, model_data, "ONNV_pos")
 
 
                          
 # --- Save best model results ----
 saveRDS(best_model, 'ONNV_INLAResults.rds', compress = "gzip")
-
-                         
