@@ -59,25 +59,26 @@ and so rows with these districts are removed from downstream analysis)
 
 ```text
  district_lower  n (= rows in the data  with these districts) 
-1            boko 38
+1            boko 39
 2            dang 33
 3          mozogo 31
 4        maroua 2 24
 5          bangue 22
 6          japoma 15
 7            odza 15
-8             abo 12
-9      nkolbisson 12
+8             abo 13
+9      nkolbisson 13
 10       mvog-ada  6
 11           <NA>  3
-12         abeche  1
-13        biltine  1
+12   garoua rural  2
+13         abeche  1
+14        biltine  1
 ```
     
 # After preprocessing 
-- Total rows in meta_data: 5407 
-- Total rows after merge: 5407 
-- Rows with geometry: 5194
-  = 213 rows without geometry 
+- Total rows in meta_data: 6336 
+- Total rows after merge: 6336 
+- Rows with geometry: 6118
+  = 218 rows without geometry 
 
 (Spatial analysis + INLA Run on these 5194 rows with geometry info) 
