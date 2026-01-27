@@ -1,9 +1,36 @@
 # Fit geostatistical models to predict ONNV FOI and prevelance across Cameroon
 # using the stochastic partial differential equation (SPDE) approach and the R-INLA package.
 
+library(ggraph)
+library(igraph)
+library(lhs)
+library(matrixStats)
+library(mvtnorm)
+library(matrixcalc)
+library(here)
+#----- Functions for multivariate Gaussian mixture serology model -----#
+library(emdbook)
+library(ggplot2)
+library(cowplot)
+library(RColorBrewer)
+library(matrixStats)
+library(stringr)
+library(data.table)
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(purrr)
+library(tidyr)
+library(stringr)
+library(sf)
+library(ggplot2)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(dplyr)
+library(here)
 
 # --- Source functions
-source(here('Functions.R'))
+source(here('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/SpatialAnalysis/Functions.R'))
 
 # Get Cameroon boundary
 cameroon <- ne_countries(country = "Cameroon", returnclass = "sf")
