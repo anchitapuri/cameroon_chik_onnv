@@ -1,18 +1,111 @@
-# 1) Extract population weighted Latitude and Longitude (from district centroids)
-# 2) Patterns of observed seroprevelance (aggregated by district, mosquito proportion and age) 
+
+# Prevelance patterns by age 
 
 # --- Source functions
-source(here('Functions.R'))
+source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
 
 
 # Load data with pop weighted coords (post preprocessing) 
-cameroon_data <- readRDS('sf_meta_data_with_coords_pw.rds')
-nrow(meta_data_with_coords)
-length(unique(cameroon_data$Sample))
-cameroon_data <- cameroon_data[!duplicated(cameroon_data$Sample), ]
+cameroon_data <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
 
-cameroon_data$year_of_survey <- as.numeric(substr(cameroon_data$Sample, 1, 4))
-unique(cameroon_data$year_of_survey)
+data_with_label <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/final_meta_data_with_labels.csv')
+nrow(data_with_label)
+
+data_with_label$year_of_survey <- as.numeric(substr(data_with_label$Sample, 1, 4))
+unique(data_with_label$year_of_survey)
+
+
+# --- prevelance patterns by age 
+
+
+# --- seroprevalence by age group by year obs data ---
+plot_age_seroprevalence_by_year <- function(data, positive_col) {
+  
+  # Recreate the filtered dataset used in the model
+  data_plot <- data
+  
+  # Age groups
+  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
+  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
+  data_plot$age_group <- cut(
+    data_plot$AgeInYears,
+    breaks = age_breaks,
+    labels = age_labels,
+    include.lowest = TRUE,
+    right = FALSE
+  )
+  
+  # Create a formula dynamically using the positive_col parameter
+  formula_mean <- as.formula(paste(positive_col, "~ year_of_survey + age_group"))
+  formula_length <- as.formula(paste(positive_col, "~ year_of_survey + age_group"))
+  
+  # Summaries by year and age group
+  obs <- aggregate(formula_mean, data_plot, mean, na.rm = TRUE)
+  n_by <- aggregate(formula_length, data_plot, length)
+  names(n_by)[3] <- "n"
+  names(obs)[3] <- "proportion_positive"  # Rename for clarity
+  
+  obs <- merge(obs, n_by, by = c("year_of_survey", "age_group"))
+  obs$obs_lower <- pmax(0, obs$proportion_positive - 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
+  obs$obs_upper <- pmin(1, obs$proportion_positive + 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
+  
+  y_limits <- if (positive_col == "CHIK_pos") {
+    c(0, 0.08)
+  } else {
+    c(0, 0.8)
+  }
+  
+  # Plot
+  p <- ggplot() +
+    geom_point(data = obs, aes(x = age_group, y = proportion_positive), size = 2, color = '#0d1b2a') +
+    geom_errorbar(data = obs, aes(x = age_group, ymin = obs_lower, ymax = obs_upper), width = 0.15, color = '#0d1b2a') +
+    
+    facet_wrap(~ year_of_survey, ncol = 5) +
+
+    scale_y_continuous(limits = y_limits) +
+    labs(
+      x = "Age group",
+      y = "Proportion seropositive",
+      title = paste("Observed seroprevalence by age group -", positive_col),
+    ) +
+    theme_bw() +
+    theme(plot.title = element_text(hjust = 0.5, size = 20),
+        axis.line = element_line(color = "black", linewidth = 0.7),  # Add x and y axis lines
+        axis.ticks.x = element_line(color = "black", size = 0.5),  # X-axis ticks only
+        axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
+        legend.position.inside = c(0.95, 0.5),
+        panel.grid = element_blank(),
+        axis.text = element_text(size = 20),
+        axis.text.x = element_text(size = 20, angle = 45, hjust = 1),  # Rotate x-axis labels
+        axis.title = element_text(size = 24),
+        aspect.ratio = 2,
+        legend.text = element_text(size = 24))
+  
+  print(p)
+  invisible(p)
+  
+  invisible(return(data_plot))
+}
+
+
+plot_age_seroprevalence_by_year(data_with_label, 'ONNV_pos')
+plot_age_seroprevalence_by_year(data_with_label, 'CHIK_pos')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Load population rasters
