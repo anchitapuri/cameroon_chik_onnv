@@ -79,6 +79,10 @@ and so rows with these districts are removed from downstream analysis)
 - Total rows in meta_data: 6336 
 - Total rows after merge: 6336 
 - Rows with geometry: 6118
-  = 218 rows without geometry 
+  = 218 rows without geometry
 
-(Spatial analysis + INLA Run on these 5194 rows with geometry info) 
+
+# Remove NA from CHIK, ONNV and MAY + Remove duplicate samples 
+Total remaining rows: 5185
+
+(Multisero model + Spatial analysis on these 5185 rows with geometry info + valid CHIK / ONNV / MAY titres) 
