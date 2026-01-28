@@ -18,6 +18,7 @@ library(dplyr)
 library(here)
 library(terra)
 library(exactextractr)
+library(raster)
 
 # read data files with labels 
 meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/base_complete_MFI_meta.csv')
@@ -168,7 +169,6 @@ cam_shapefile_districts_merged <- cam_shapefile_districts_merged %>%
 cam_shapefile_districts_merged <- cam_shapefile_districts_merged %>%
   st_make_valid()
 
-View(cam_shapefile_districts_merged)
 
 # One geometry per district 
 cam_shapefile_districts_unique <- cam_shapefile_districts_merged %>%
@@ -420,7 +420,25 @@ location_counts <- sf_meta_data_with_coords_pw %>%
   group_by(district_lower, Longitude, Latitude) %>%
   summarise(n_samples = n(), .groups = 'drop')
 
-max(location_counts$n_samples)
+# Convert raster to data frame for ggplot
+cam_pop_df <- as.data.frame(cam_pop_den, xy = TRUE)
+colnames(cam_pop_df) <- c("x", "y", "pop_density")
+
+# Create the population density inset map
+inset_map <- ggplot(cam_pop_df, aes(x = x, y = y, fill = pop_density)) +
+  geom_raster() +
+  scale_fill_viridis_c(name = "Population\nDensity", 
+                       option = "magma",
+                       trans = "log10",
+                       na.value = "transparent") +
+  coord_equal() +
+  labs(title = "Log Population Density") +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.background = element_rect(fill = "white", color = "black", linewidth = 0.5),
+    plot.margin = margin(3, 3, 3, 3)
+  )
 
 # Figure 1a: Map of Cameroon with sample collection locations
 fig1a <- ggplot() +
@@ -445,6 +463,15 @@ fig1a <- ggplot() +
   )
 
 print(fig1a)
+
+# Add the inset map using patchwork
+fig1a_with_inset <- fig1a +
+  inset_element(inset_map, 
+                left = 0.05, bottom = 0.60, 
+                right = 0.45, top = 1,
+                align_to = "panel")
+
+print(fig1a_with_inset)
 
 
 # Figure 1b: Number of samples by year of survey
@@ -476,6 +503,25 @@ print(fig1b)
 
 # Figure 1c: Male vs Female by Age
 # Recode Sex variable (1 = Male, 2 = Female)
+
+# Reshape census data to long format for plotting
+census_long <- cameroon_age_2025 %>%
+  pivot_longer(cols = c(M, F), names_to = "Sex_label", values_to = "census_count") %>%
+  mutate(
+    Sex_label = case_when(
+      Sex_label == "M" ~ "Male",
+      Sex_label == "F" ~ "Female"
+    ),
+    # Scale down by 10,000 and make female counts negative
+    census_count = census_count / 10000,
+    census_count = ifelse(Sex_label == "Female", -census_count, census_count),
+    age_group = factor(Age, levels = c("0-4", "5-9", "10-14", "15-19", "20-24", 
+                                       "25-29", "30-34", "35-39", "40-44", "45-49",
+                                       "50-54", "55-59", "60-64", "65-69", "70-74",
+                                       "75-79", "80-84", "85-89", "90-94", "95-99"))
+  )
+
+
 pyramid_data <- sf_meta_data_with_coords_pw %>%
   st_drop_geometry() %>%
   filter(!is.na(Sex) & !is.na(AgeInYears)) %>%
@@ -498,29 +544,41 @@ pyramid_data <- sf_meta_data_with_coords_pw %>%
   # Make female counts negative for left side of pyramid
   mutate(count = ifelse(Sex_label == "Female", -count, count))
 
+
+
 fig1c <- ggplot(pyramid_data, aes(x = age_group, y = count, fill = Sex_label)) +
   geom_bar(stat = "identity", width = 0.9) +
+  # Add census data as lines (scaled down by 10,000)
+  geom_line(data = census_long, 
+            aes(x = age_group, y = census_count, color = Sex_label, group = Sex_label),
+            linewidth = 1.2, linetype = "solid") +
+  geom_point(data = census_long,
+             aes(x = age_group, y = census_count, color = Sex_label),
+             size = 3) +
   scale_y_continuous(labels = abs, 
                      breaks = seq(-max(abs(pyramid_data$count)), 
-                                  max(abs(pyramid_data$count)), 
-                                  by = 100)) +
+                                 max(abs(pyramid_data$count)), 
+                                 by = 100)) +
   scale_fill_manual(values = c("Male" = "#b66577", "Female" = "#379392"),
-                    name = "") +
+                    name = "Sample") +
+  scale_color_manual(values = c("Male" = "#8b4456", "Female" = "#2a6e6d"),
+                     name = "Census (Pop/10,000)") +
   theme_minimal() +
-  labs(title = "Distribution of Samples by Age Group and Sex",
+  labs(title = "Distribution of Samples by Age Group and Sex with Census Data",
        x = "Age Group",
        y = "Number of Samples") +
   theme(plot.title = element_text(hjust = 0.5, size = 20),
-        axis.line = element_line(color = "black", linewidth = 0.7),  # Add x and y axis lines
-        axis.ticks.x = element_line(color = "black", size = 0.5),  # X-axis ticks only
-        axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
+        axis.line = element_line(color = "black", linewidth = 0.7),
+        axis.ticks.x = element_line(color = "black", size = 0.5),
+        axis.ticks.y = element_line(color = "black", size = 0.5),
         legend.position.inside = c(0.95, 0.5),
         panel.grid = element_blank(),
         axis.text = element_text(size = 20),
-        axis.text.x = element_text(size = 20, angle = 45, hjust = 1),  # Rotate x-axis labels
+        axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
         axis.title = element_text(size = 24),
         aspect.ratio = 0.75,
-        legend.text = element_text(size = 24), 
-        )
+        legend.text = element_text(size = 24),
+       legend.title = element_text(size = 20))  # Add this line for legend titles
+
 
 print(fig1c)

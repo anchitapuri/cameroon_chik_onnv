@@ -114,6 +114,8 @@ print(p_CR)
 p_sero <- plot_seroprevalence(chains_df)
 print(p_sero)
 
+
+
 # plot prevelance by age group
 plot_age_seroprevalence(meta_data, chains_df, component_col = 2, pathogen_name = "ONNV")
 
