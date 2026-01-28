@@ -22,7 +22,7 @@ library(here)
 library(cmdstanr)
 library(patchwork)
 
-source(here('MultiSeroFunctions.R'))
+source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/MultiSeroModel/MultiSeroFunctions.R'))
 
 # Setup cmdstan
 check_cmdstan_toolchain()
@@ -34,14 +34,11 @@ model_path = "/Users/ap2488/Desktop/Cameroon_Analysis_2025/Final_MultiSero.stan"
 mod = cmdstan_model(model_path_final, pedantic=FALSE)
 
 # Import data file 
-meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/base_complete_MFI_meta.csv')
+meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv')
 nrow(meta_data)
 
 
 # Remove NAs
-sum(is.na(meta_data$CHIKV_sE2))
-sum(is.na(meta_data$MAYV_E2))
-sum(is.na(meta_data$ONNV_VLP))
 meta_data <- meta_data %>%
   drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP)
 
@@ -83,6 +80,7 @@ save_cmdstan_config=TRUE
 
 #save fits
 fit$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/final_model_fits.rds')
+fit <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/redone_final_model_fits.rds')
 
 # extract chains
 chains <- fit$draws(format='df')
@@ -98,14 +96,31 @@ p4 <- mcmc_trace(fit_final_model$draws(c('phi','rho00')))
 print(p1 + p2 + p3 + p4)
 
 # Plot fits (neg component, neg-CR component, pos component)
-# Show cross-reactive negatives only for CHIK (pathogen 2)
-distfits <- plot_fits(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens,
-                                      show_crossreactive_for = 2)
-distfits$fit
+distfits <- plot_fits(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens, show_crossreactive_for = seq_along(preprocessed_data$pathogens))
 distfits$fitPN
 
 
-# Component labels 
+# extract phi and mu1 posterior distributions
+phi <- extract_phi(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
+mu <- extract_mu(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
+
+
+# plot titre increease due to infection / CR for each pathogen
+p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
+print(p_CR)
+
+
+# plot proportion pos 
+p_sero <- plot_seroprevalence(chains_df)
+print(p_sero)
+
+# plot prevelance by age group
+plot_age_seroprevalence_from_model(meta_data, fit, sero_index = 1, pathogen_name = "ONNV")
+
+
+
+
+# Component labels for INLA 
 N  <- preprocessed_data$data$N
 nC <- preprocessed_data$data$nC
 draws_post <- as_draws_df(fit_final_model$draws("post_prob"))

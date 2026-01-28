@@ -1,33 +1,21 @@
 # Fit geostatistical models to predict ONNV FOI and prevelance across Cameroon
 # using the stochastic partial differential equation (SPDE) approach and the R-INLA package.
 
-library(ggraph)
-library(igraph)
-library(lhs)
-library(matrixStats)
-library(mvtnorm)
-library(matrixcalc)
 library(here)
-#----- Functions for multivariate Gaussian mixture serology model -----#
 library(emdbook)
 library(ggplot2)
 library(cowplot)
 library(RColorBrewer)
 library(matrixStats)
-library(stringr)
 library(data.table)
-library(ggplot2)
 library(dplyr)
 library(scales)
 library(purrr)
 library(tidyr)
 library(stringr)
 library(sf)
-library(ggplot2)
 library(rnaturalearth)
 library(rnaturalearthdata)
-library(dplyr)
-library(here)
 
 # --- Source functions
 source(here('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/SpatialAnalysis/Functions.R'))
@@ -47,37 +35,17 @@ cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
 
 # ----- Read preprocessed data with coords 
-cameroon_data <- readRDS('sf_meta_data_with_coords_pw.rds')
-nrow(cameroon_data)
-model_data <- cameroon_data
+model_data <- readRDS('sf_meta_data_with_coords_pw.rds')
+nrow(model_data)
 
 
-
-# --- Compare models with difference covariates 
-model_comparison <- compare_models(
-  year_intro = 1900,
-  data = model_data,
-  cameroon,
-  anopheles_funestus,
-  anopheles_gambiae, 
-  positive_col = "ONNV_pos"
-)
-
-
-# Plot DIC and WAIC to compare models 
-plot_model_comparison(model_comparison$comparison)
-
-
-# Run best model (ie with best covariate/s)
-best_model <- run_inla_model_comparision(
+# --- Run INLA model for ONNV (with historic year of intro 1900)
+onnv_results <- run_inla(
   year_intro = 1900,
   data = model_data,
   cameroon = cameroon,
-  anopheles_funestus = anopheles_funestus,  
-  anopheles_gambiae = anopheles_gambiae,
-  positive_col = "ONNV_pos",
-  covariates = "baseline"
-)
+  positive_col = "ONNV_pos")
+
 
 
 
