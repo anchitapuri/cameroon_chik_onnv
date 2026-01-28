@@ -41,7 +41,9 @@ anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_An
 anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_gambiae_ss_CMR.tiff')
 
 # Load population by gender / age data 
-
+cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/CameroonAge2025.csv')
+cameroon_age_2025 <- cameroon_age_2025 %>%
+  mutate(total = M + F)
 
 # ---1) Match district names in data with shapefiles to extract geometry for each district 
 # Clean names + create lower case district column

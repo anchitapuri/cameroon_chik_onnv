@@ -115,7 +115,8 @@ p_sero <- plot_seroprevalence(chains_df)
 print(p_sero)
 
 # plot prevelance by age group
-plot_age_seroprevalence_from_model(meta_data, fit, sero_index = 1, pathogen_name = "ONNV")
+plot_age_seroprevalence(meta_data, chains_df, component_col = 2, pathogen_name = "ONNV")
+
 
 
 
@@ -158,6 +159,3 @@ ggplot(meta_data_alpha,
 
 # save file with labels 
 write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/final_meta_data_with_labels.csv", row.names = FALSE)
-
-
-

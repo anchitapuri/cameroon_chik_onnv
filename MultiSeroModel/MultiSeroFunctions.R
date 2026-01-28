@@ -140,7 +140,6 @@ extract_sero <- function(chains, data, pathogens){
 }
 
 
-
 #----- Extract covariance matrices per iteration
 extract_covM <- function(chains, data){
   
@@ -433,12 +432,12 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
   onnv_mu1_med <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(med)
   onnv_mu1_ciL <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(ciL)
   onnv_mu1_ciU <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(ciU)
-
+  
   # CHIK homologous
   chik_mu1_med <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(med)
   chik_mu1_ciL <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(ciL)
   chik_mu1_ciU <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(ciU)
-  
+
   # ONNV → CHIK cross-reactive
   onnv_to_chik_phi_med <- phi_df %>% filter(pos == "ONNV_VLP_log", neg == "CHIKV_sE2_log") %>% pull(med)
   onnv_to_chik_phi_ciL <- phi_df %>% filter(pos == "ONNV_VLP_log", neg == "CHIKV_sE2_log") %>% pull(ciL)
@@ -461,7 +460,8 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
   # Create plotting data - 4 rows total
   plot_data <- tibble(
     antigen = c("ONNV_VLP_log", "ONNV_VLP_log", "CHIKV_sE2_log", "CHIKV_sE2_log"),
-    infecting_virus = c("ONNV", "CHIK", "CHIK", "ONNV"),
+    response_type = c("Homologous", "Cross-reactive (φ × μ1)", 
+                      "Homologous", "Cross-reactive (φ × μ1)"),
     increase = c(
       onnv_mu1_med,                  # ONNV homologous
       chik_to_onnv_increase_med,     # CHIK → ONNV cross-reactive
@@ -479,16 +479,16 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
       chik_to_onnv_increase_ciU,
       chik_mu1_ciU,
       onnv_to_chik_increase_ciU
-    )
+    ),
+    infecting_virus = c("ONNV", "CHIK", "CHIK", "ONNV")
   ) %>%
     mutate(
-      infecting_virus = factor(infecting_virus, levels = c("ONNV", "CHIK")),
-      antigen_label = ifelse(antigen == "ONNV_VLP_log", "ONNV antigen", "CHIK antigen")
+      response_type = factor(response_type, levels = c("Homologous", "Cross-reactive (φ × μ1)")),
+      antigen_label = ifelse(antigen == "ONNV_VLP_log", "ONNV", "CHIK")
     )
   
-  
-  p <- ggplot(plot_data, aes(x = infecting_virus, y = increase, fill = infecting_virus)) +
-    geom_col(width = 0.7, alpha = 0.8) +
+  p <- ggplot(plot_data, aes(x = response_type, y = increase, fill = infecting_virus)) +
+    geom_col(position = position_dodge(width = 0.8), width = 0.7, alpha = 0.8) +
     geom_errorbar(aes(ymin = ciL, ymax = ciU), 
                   position = position_dodge(width = 0.8), 
                   width = 0.25, linewidth = 0.8) +
@@ -496,7 +496,7 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
     scale_fill_manual(
       values = c("ONNV" = "#c7035b", "CHIK" = "#028eb1"),
       name = "Infecting virus"
-    ) +
+    )  +
     labs(
       x = "",
       y = "Antibody titer increase (log units)",
@@ -504,8 +504,9 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
     ) +
     theme_bw() +
     theme(
+      aspect.ratio = 1,
       plot.title = element_text(hjust = 0.5, size = 20),
-      axis.text.x = element_text(size = 20),
+      axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
       axis.text.y = element_text(size = 20),
       axis.title = element_text(size = 20),
       strip.text = element_text(size = 20),
@@ -513,14 +514,11 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
       legend.position = "right",
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20),
-      panel.grid.major.x = element_blank(),
-      aspect.ratio = 1
+      panel.grid.major.x = element_blank()
     )
   
   return(p)
 }
-
-
 
 # --- Plot proportion positive 
 plot_seroprevalence <- function(chains_df) {
@@ -544,7 +542,7 @@ plot_seroprevalence <- function(chains_df) {
     geom_col(width = 0.6, alpha = 0.8) +
     geom_errorbar(aes(ymin = ciL, ymax = ciU), width = 0.25, linewidth = 0.8) +
     scale_fill_manual(
-      values = c("ONNV" = "#E63946", "CHIK" = "#028eb1"),
+      values = c("ONNV" = "#c7035b", "CHIK" = "#028eb1"),
       guide = "none"
     ) +
     scale_y_continuous(limits = c(0, NA), labels = scales::percent) +
@@ -556,16 +554,14 @@ plot_seroprevalence <- function(chains_df) {
     theme_bw() +
     theme(
       plot.title = element_text(hjust = 0.5, size = 20),
-     axis.text.x = element_text(size = 20),
-      axis.text.y = element_text(size = 20),
+      axis.text.x = element_text(size = 24),
+      axis.text.y = element_text(size = 24),
       axis.title = element_text(size = 20),
       strip.text = element_text(size = 20),
       strip.background = element_rect(fill = "gray90"),
       legend.position = "right",
-      legend.title = element_text(size = 20),
-      legend.text = element_text(size = 20),
       panel.grid.major.x = element_blank(),
-      aspect.ratio = 1
+      aspect.ratio = 0.5
     )
   
   # Print the values
@@ -577,18 +573,19 @@ plot_seroprevalence <- function(chains_df) {
 
 
 
-
 # ---- Plot proportion positive by age 
 plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_name) {
   
   N <- nrow(data)
   
   # Age groups
-  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
+  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, Inf)
   age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
 
-    
+  print(length(age_breaks))
+  print(length(age_labels))
   data_plot <- data
+
 
   data_plot$age_group <- cut(
     data_plot$AgeInYears,
@@ -612,14 +609,14 @@ plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_nam
     
     # Calculate prevalence by YEAR and age group for this draw
     data_plot %>%
-      mutate(prob_pos = probs_this_draw) %>%
+      dplyr::mutate(prob_pos = probs_this_draw) %>%
       group_by(year_of_survey, age_group) %>%
       summarise(
         prevalence = mean(prob_pos, na.rm = TRUE),
         n = n(),
         .groups = "drop"
       ) %>%
-      mutate(draw = draw_num)
+      dplyr::mutate(draw = draw_num)
   })
   
   # Summarize across draws to get median and credible intervals
@@ -657,7 +654,7 @@ plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_nam
       axis.text = element_text(size = 20),
       axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
       axis.title = element_text(size = 24),
-      aspect.ratio = 2
+      aspect.ratio = 1
     )
   
   print(p)
