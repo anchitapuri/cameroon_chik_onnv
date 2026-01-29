@@ -573,14 +573,25 @@ plot_seroprevalence <- function(chains_df) {
 
 
 # ---- Plot proportion positive by age 
-plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_name) {
-  N <- nrow(data)
+plot_age_seroprevalence <- function(data, chains_df, infM, pathogen_col, pathogen_name) {
+  
+  # Find which components have pathogen_col = 1
+  nC <- nrow(infM)
+  positive_components <- which(infM[, pathogen_col] == 1)
   
   # Age groups
-  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, Inf)
+  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
   age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
   
-  data_plot <- data
+  # Filter out NA ages and track which rows we're keeping
+  data_plot <- data %>%
+    mutate(original_row = row_number()) %>%  # Track original indices
+    filter(!is.na(AgeInYears))  # Remove rows with NA ages
+  
+  # Get the indices of rows we're keeping
+  kept_indices <- data_plot$original_row
+  N_kept <- length(kept_indices)
+  
   data_plot$age_group <- cut(
     data_plot$AgeInYears,
     breaks = age_breaks,
@@ -589,19 +600,22 @@ plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_nam
     right = FALSE
   )
   
-  # Extract ALL posterior probabilities at once (more efficient)
-  # This creates a matrix: rows = draws, columns = individuals
-  prob_cols <- sprintf("post_prob[%d,%d]", 1:N, component_col)
-  probs_all_draws <- as.matrix(chains_df[, prob_cols])
+  # Extract probabilities ONLY for individuals we're keeping
+  prob_cols_list <- lapply(positive_components, function(comp) {
+    sprintf("post_prob[%d,%d]", kept_indices, comp)  # Use kept_indices instead of 1:N
+  })
+  
+  # Sum probabilities across all positive components for each draw
+  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
+    as.matrix(chains_df[, cols])
+  }))
   
   n_draws <- nrow(probs_all_draws)
   
-  # For EACH posterior draw, calculate age-specific prevalence BY YEAR
+  # Calculate prevalence by year and age group for each draw
   prevalence_draws <- map_dfr(1:n_draws, function(draw_num) {
-    # Get probabilities for this draw (already a vector)
     probs_this_draw <- probs_all_draws[draw_num, ]
     
-    # Calculate prevalence by YEAR and age group for this draw
     data_plot %>%
       dplyr::mutate(prob_pos = probs_this_draw) %>%
       group_by(year_of_survey, age_group) %>%
@@ -613,7 +627,7 @@ plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_nam
       dplyr::mutate(draw = draw_num)
   })
   
-  # Rest of your code remains the same...
+  # Summarize across draws
   obs <- prevalence_draws %>%
     group_by(year_of_survey, age_group) %>%
     summarise(
@@ -627,9 +641,9 @@ plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_nam
   y_limits <- if (pathogen_name == "CHIK") c(0, 0.08) else c(0, 0.8)
   
   p <- ggplot(obs, aes(x = age_group)) +
-    geom_point(aes(y = proportion_positive), size = 2, color = '#0d1b2a') +
     geom_errorbar(aes(ymin = obs_lower, ymax = obs_upper), 
-                  width = 0.15, color = '#0d1b2a') +
+                  width = 0.15, linewidth = 0.8,color = '#057cfc') +      
+    geom_point(aes(y = proportion_positive), size = 2, color = '#057cfc') +  
     facet_wrap(~ year_of_survey, ncol = 5) +
     scale_y_continuous(limits = y_limits) +
     labs(
@@ -646,7 +660,8 @@ plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_nam
       axis.text = element_text(size = 20),
       axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
       axis.title = element_text(size = 24),
-      aspect.ratio = 1
+      aspect.ratio = 2,
+      strip.text = element_text(size = 20),
     )
   
   print(p)

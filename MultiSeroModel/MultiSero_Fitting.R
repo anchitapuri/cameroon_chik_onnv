@@ -117,9 +117,12 @@ print(p_sero)
 # plot age seroprevalence (statified by survey year)
 meta_data$year_of_survey <- as.numeric(substr(meta_data$Sample, 1, 4))
 unique(meta_data$year_of_survey)
+sum(is.na(meta_data$AgeInYears))
 
-plot_age_seroprevalence(meta_data, chains_df, component_col = 2, pathogen_name = "ONNV")
-
+quartz(width = 18, height = 14)
+plot_age_seroprevalence(meta_data, chains_df, infM = preprocessed_data$data$infM,
+                       pathogen_col = 1,  # column 'a' for ONNV
+                       pathogen_name = "ONNV")
 
 
 # --- Cluster assignment based on max probability - For INLA analysis 
@@ -162,4 +165,4 @@ ggplot(meta_data_alpha,
   theme_minimal()
 
 # save file with labels 
-write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/final_meta_data_with_labels.csv", row.names = FALSE)
+write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv", row.names = FALSE)

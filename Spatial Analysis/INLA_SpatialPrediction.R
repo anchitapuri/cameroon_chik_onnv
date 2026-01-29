@@ -48,7 +48,6 @@ onnv_results <- run_inla(
 
 
 
-
 # --- Index of prediction and estimation stacks 
 index_pred_onnv <- inla.stack.index(best_model$stk.full, "pred")$data
 length(index_pred_onnv)
@@ -77,7 +76,7 @@ sero_onnv <- plot_predicted_seroprevalence(
   pathogen_name = "ONNV"
 )
 
-
+# --- Annual Infections 
                          
 # --- Model fits 
 plot_age_seroprevalence_model_fits(best_model$year,best_model, model_data, "ONNV_pos")
@@ -86,3 +85,7 @@ plot_age_seroprevalence_model_fits(best_model$year,best_model, model_data, "ONNV
                          
 # --- Save best model results 
 saveRDS(best_model, 'ONNV_INLAResults.rds', compress = "gzip")
+
+
+
+# --- Mosquito and population proportion vs proportion positive 
