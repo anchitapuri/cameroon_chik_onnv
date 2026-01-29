@@ -114,25 +114,27 @@ print(p_CR)
 p_sero <- plot_seroprevalence(chains_df)
 print(p_sero)
 
+# plot age seroprevalence (statified by survey year)
+meta_data$year_of_survey <- as.numeric(substr(meta_data$Sample, 1, 4))
+unique(meta_data$year_of_survey)
 
-
-# plot prevelance by age group
 plot_age_seroprevalence(meta_data, chains_df, component_col = 2, pathogen_name = "ONNV")
 
 
 
-
+# --- Cluster assignment based on max probability - For INLA analysis 
 
 # Component labels for INLA 
 N  <- preprocessed_data$data$N
 nC <- preprocessed_data$data$nC
-draws_post <- as_draws_df(fit_final_model$draws("post_prob"))
+draws_post <- as_draws_df(fit$draws("post_prob"))
 prob_matrix <- matrix(NA_real_, nrow = N, ncol = nC)
 for (n in 1:N) {
   for (c in 1:nC) {
     prob_matrix[n, c] <- mean(draws_post[[sprintf("post_prob[%d,%d]", n, c)]])
   }
 }
+
 cluster_assignment <- apply(prob_matrix, 1, which.max)
 table(cluster_assignment)
 

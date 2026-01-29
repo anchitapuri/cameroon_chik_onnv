@@ -415,6 +415,8 @@ write.csv(preprocessed_meta_data_without_coords,
           row.names = FALSE)
 
 
+sf_meta_data_with_coords_pw <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
+
 # --- Figure 1 ----
 location_counts <- sf_meta_data_with_coords_pw %>%
   group_by(district_lower, Longitude, Latitude) %>%
@@ -503,25 +505,13 @@ print(fig1b)
 
 # Figure 1c: Male vs Female by Age
 # Recode Sex variable (1 = Male, 2 = Female)
+census_totals <- cameroon_age_2025 %>%
+summarise(
+  total_M = sum(M),
+  total_F = sum(F)
+)
 
-# Reshape census data to long format for plotting
-census_long <- cameroon_age_2025 %>%
-  pivot_longer(cols = c(M, F), names_to = "Sex_label", values_to = "census_count") %>%
-  mutate(
-    Sex_label = case_when(
-      Sex_label == "M" ~ "Male",
-      Sex_label == "F" ~ "Female"
-    ),
-    # Scale down by 10,000 and make female counts negative
-    census_count = census_count / 10000,
-    census_count = ifelse(Sex_label == "Female", -census_count, census_count),
-    age_group = factor(Age, levels = c("0-4", "5-9", "10-14", "15-19", "20-24", 
-                                       "25-29", "30-34", "35-39", "40-44", "45-49",
-                                       "50-54", "55-59", "60-64", "65-69", "70-74",
-                                       "75-79", "80-84", "85-89", "90-94", "95-99"))
-  )
-
-
+census_totals
 pyramid_data <- sf_meta_data_with_coords_pw %>%
   st_drop_geometry() %>%
   filter(!is.na(Sex) & !is.na(AgeInYears)) %>%
@@ -544,27 +534,54 @@ pyramid_data <- sf_meta_data_with_coords_pw %>%
   # Make female counts negative for left side of pyramid
   mutate(count = ifelse(Sex_label == "Female", -count, count))
 
+sample_totals <- pyramid_data %>%
+  group_by(Sex_label) %>%
+  summarise(total_samples = sum(abs(count)), .groups = 'drop')
 
+# Calculate expected samples based on census proportions
+expected_data <- cameroon_age_2025 %>%
+  pivot_longer(cols = c(M, F), names_to = "Sex_label", values_to = "census_count") %>%
+  mutate(
+    Sex_label = case_when(
+      Sex_label == "M" ~ "Male",
+      Sex_label == "F" ~ "Female"
+    )
+  ) %>%
+  left_join(sample_totals, by = "Sex_label") %>%
+  mutate(
+    # Calculate total census population by sex
+    total_census = ifelse(Sex_label == "Male", census_totals$total_M, census_totals$total_F),
+    # Calculate proportion of total population in this age group
+    proportion = census_count / total_census,
+    # Expected samples = total samples for this sex * proportion in this age group
+    expected_count = total_samples * proportion,
+    # Make female counts negative for pyramid
+    expected_count = ifelse(Sex_label == "Female", -expected_count, expected_count),
+    age_group = factor(Age, levels = c("0-4", "5-9", "10-14", "15-19", "20-24", 
+                                       "25-29", "30-34", "35-39", "40-44", "45-49",
+                                       "50-54", "55-59", "60-64", "65-69", "70-74",
+                                       "75-79", "80-84", "85-89", "90-94", "95-99"))
+  )
 
 fig1c <- ggplot(pyramid_data, aes(x = age_group, y = count, fill = Sex_label)) +
   geom_bar(stat = "identity", width = 0.9) +
-  # Add census data as lines (scaled down by 10,000)
-  geom_line(data = census_long, 
-            aes(x = age_group, y = census_count, color = Sex_label, group = Sex_label),
+  # Add expected distribution as lines
+  geom_line(data = expected_data, 
+            aes(x = age_group, y = expected_count, color = Sex_label, group = Sex_label),
             linewidth = 1.2, linetype = "solid") +
-  geom_point(data = census_long,
-             aes(x = age_group, y = census_count, color = Sex_label),
+  geom_point(data = expected_data,
+             aes(x = age_group, y = expected_count, color = Sex_label),
              size = 3) +
   scale_y_continuous(labels = abs, 
                      breaks = seq(-max(abs(pyramid_data$count)), 
                                  max(abs(pyramid_data$count)), 
                                  by = 100)) +
   scale_fill_manual(values = c("Male" = "#b66577", "Female" = "#379392"),
-                    name = "Sample") +
+                    name = "Observed") +
   scale_color_manual(values = c("Male" = "#8b4456", "Female" = "#2a6e6d"),
-                     name = "Census (Pop/10,000)") +
+                     name = "Expected (Census)") +
   theme_minimal() +
-  labs(title = "Distribution of Samples by Age Group and Sex with Census Data",
+  labs(title = "Distribution of Samples by Age Group and Sex with Expected Distribution",
        x = "Age Group",
        y = "Number of Samples") +
   theme(plot.title = element_text(hjust = 0.5, size = 20),
@@ -578,7 +595,6 @@ fig1c <- ggplot(pyramid_data, aes(x = age_group, y = count, fill = Sex_label)) +
         axis.title = element_text(size = 24),
         aspect.ratio = 0.75,
         legend.text = element_text(size = 24),
-       legend.title = element_text(size = 20))  # Add this line for legend titles
-
+        legend.title = element_text(size = 20))
 
 print(fig1c)

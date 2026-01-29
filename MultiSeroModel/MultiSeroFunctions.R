@@ -423,7 +423,6 @@ extract_phi <- function(chains, data, pathogens){
 
 
 
-
 # --- Plot cross reactivity - ONNV vs CHIK
 plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
   
@@ -575,18 +574,13 @@ plot_seroprevalence <- function(chains_df) {
 
 # ---- Plot proportion positive by age 
 plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_name) {
-  
   N <- nrow(data)
   
   # Age groups
   age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, Inf)
   age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
-
-  print(length(age_breaks))
-  print(length(age_labels))
+  
   data_plot <- data
-
-
   data_plot$age_group <- cut(
     data_plot$AgeInYears,
     breaks = age_breaks,
@@ -595,17 +589,17 @@ plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_nam
     right = FALSE
   )
   
-  # Get number of posterior draws
-  n_draws <- nrow(chains_df)
+  # Extract ALL posterior probabilities at once (more efficient)
+  # This creates a matrix: rows = draws, columns = individuals
+  prob_cols <- sprintf("post_prob[%d,%d]", 1:N, component_col)
+  probs_all_draws <- as.matrix(chains_df[, prob_cols])
+  
+  n_draws <- nrow(probs_all_draws)
   
   # For EACH posterior draw, calculate age-specific prevalence BY YEAR
   prevalence_draws <- map_dfr(1:n_draws, function(draw_num) {
-    
-    # Extract posterior probabilities for all individuals for this draw
-    probs_this_draw <- sapply(1:N, function(n) {
-      col_name <- sprintf("post_prob[%d,%d]", n, component_col)
-      chains_df[[col_name]][draw_num]
-    })
+    # Get probabilities for this draw (already a vector)
+    probs_this_draw <- probs_all_draws[draw_num, ]
     
     # Calculate prevalence by YEAR and age group for this draw
     data_plot %>%
@@ -619,7 +613,7 @@ plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_nam
       dplyr::mutate(draw = draw_num)
   })
   
-  # Summarize across draws to get median and credible intervals
+  # Rest of your code remains the same...
   obs <- prevalence_draws %>%
     group_by(year_of_survey, age_group) %>%
     summarise(
@@ -630,10 +624,8 @@ plot_age_seroprevalence <- function(data, chains_df, component_col, pathogen_nam
       .groups = "drop"
     )
   
-  # Y-axis limits
   y_limits <- if (pathogen_name == "CHIK") c(0, 0.08) else c(0, 0.8)
   
-  # Plot
   p <- ggplot(obs, aes(x = age_group)) +
     geom_point(aes(y = proportion_positive), size = 2, color = '#0d1b2a') +
     geom_errorbar(aes(ymin = obs_lower, ymax = obs_upper), 
