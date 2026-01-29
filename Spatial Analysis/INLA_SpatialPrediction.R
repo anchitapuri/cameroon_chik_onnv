@@ -16,9 +16,10 @@ library(stringr)
 library(sf)
 library(rnaturalearth)
 library(rnaturalearthdata)
+library(INLA)
 
 # --- Source functions
-source(here('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/SpatialAnalysis/Functions.R'))
+source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
 
 # Get Cameroon boundary
 cameroon <- ne_countries(country = "Cameroon", returnclass = "sf")
@@ -26,7 +27,7 @@ cameroon <- ne_countries(country = "Cameroon", returnclass = "sf")
 # Population and mosquito rasts
 anopheles_funestus <- rast('2010_Anopheles_funestus_CMR.tiff')
 anopheles_gambiae <- rast('2010_Anopheles_gambiae_ss_CMR.tiff')
-cam_pop <- rast("cmr_ppp_2020_UNadj.tif")
+cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
 
 
 # Cameroon population by age
@@ -35,13 +36,20 @@ cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
 
 # ----- Read preprocessed data with coords 
-model_data <- readRDS('sf_meta_data_with_coords_pw.rds')
-nrow(model_data)
+meta_data_with_coords <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
+nrow(meta_data_with_coords)
 
+meta_data_with_labels <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv')
+nrow(meta_data_with_labels)
+
+meta_data_with_labels$Easting <- meta_data_with_coords$Easting
+meta_data_with_labels$Northing <- meta_data_with_coords$Northing
+
+model_data <- meta_data_with_labels
 
 # --- Run INLA model for ONNV (with historic year of intro 1900)
 onnv_results <- run_inla(
-  year_intro = 1900,
+   year_intro = 1900,
   data = model_data,
   cameroon = cameroon,
   positive_col = "ONNV_pos")
@@ -77,6 +85,18 @@ sero_onnv <- plot_predicted_seroprevalence(
 )
 
 # --- Annual Infections 
+age_weights <- cameroon_age_2025$total / sum(cameroon_age_2025$total)
+
+# Population per pixel (from gridded data)
+total_pop_per_pixel <- extract(cam_pop, foi_onnv$coop)
+
+# Distribute pixel population across age groups
+pop_data <- outer(total_pop_per_pixel, age_weights)
+
+
+
+
+
                          
 # --- Model fits 
 plot_age_seroprevalence_model_fits(best_model$year,best_model, model_data, "ONNV_pos")
