@@ -417,8 +417,10 @@ write.csv(preprocessed_meta_data_without_coords,
 
 sf_meta_data_with_coords_pw <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
 
+
 # --- Figure 1 ----
 location_counts <- sf_meta_data_with_coords_pw %>%
+  st_drop_geometry() %>%  # Remove spatial features
   group_by(district_lower, Longitude, Latitude) %>%
   summarise(n_samples = n(), .groups = 'drop')
 
@@ -430,7 +432,7 @@ colnames(cam_pop_df) <- c("x", "y", "pop_density")
 inset_map <- ggplot(cam_pop_df, aes(x = x, y = y, fill = pop_density)) +
   geom_raster() +
   scale_fill_viridis_c(name = "Population\nDensity", 
-                       option = "magma",
+                       option = "plasma",
                        trans = "log10",
                        na.value = "transparent") +
   coord_equal() +
@@ -447,12 +449,11 @@ fig1a <- ggplot() +
   geom_sf(data = sf_meta_data_with_coords_pw, fill = "#ffffff", color = "#6d7275") +
   geom_point(data = location_counts, 
              aes(x = Longitude, y = Latitude, size = n_samples),
-             color = "#04678e", alpha = 0.9) +
+             color = "#00798c", alpha = 0.9) +
   scale_size_continuous(name = "Number of Samples", range = c(2, 10),
                         breaks = seq(0, max(location_counts$n_samples), by = 30), limits = c(0, max(location_counts$n_samples)))  +
   theme_minimal() +
-  labs(title = "Sample Collection Locations in Cameroon",
-       x = "Longitude", y = "Latitude") +
+  labs(x = "Longitude", y = "Latitude") +
   theme(
     panel.grid = element_blank(),
     plot.title = element_text(hjust = 0.5, size = 24),  
@@ -463,8 +464,6 @@ fig1a <- ggplot() +
     legend.title = element_text(size = 20),                             # Legend title
     legend.text = element_text(size = 20)                               # Legend text
   )
-
-print(fig1a)
 
 # Add the inset map using patchwork
 fig1a_with_inset <- fig1a +
@@ -482,7 +481,7 @@ fig1b <- sf_meta_data_with_coords_pw %>%
   group_by(year_of_survey) %>%
   summarise(n_samples = n()) %>%
   ggplot(aes(x = factor(year_of_survey), y = n_samples)) +
-  geom_bar(stat = "identity", fill = "#187795") +
+  geom_bar(stat = "identity", fill = "#00798c") +
   geom_text(size = 8, aes(label = n_samples), vjust = -0.5) +
   theme_minimal() +
   labs(x = "Year of Survey",
@@ -511,41 +510,68 @@ summarise(
   total_F = sum(F)
 )
 
-census_totals
 pyramid_data <- sf_meta_data_with_coords_pw %>%
   st_drop_geometry() %>%
-  filter(!is.na(Sex) & !is.na(AgeInYears)) %>%
-  mutate(Sex_label = case_when(
-    Sex == 1 ~ "Male",
-    Sex == 2 ~ "Female",
-    TRUE ~ as.character(Sex)
-  )) %>%
-  # Create age groups with cleaner labels
-  mutate(age_group = cut(AgeInYears, 
-                         breaks = seq(0, 100, by = 5),
-                         include.lowest = TRUE,
-                         right = FALSE,
-                         labels = c("0-4", "5-9", "10-14", "15-19", "20-24", 
-                                    "25-29", "30-34", "35-39", "40-44", "45-49",
-                                    "50-54", "55-59", "60-64", "65-69", "70-74",
-                                    "75-79", "80-84", "85-89", "90-94", "95-99"))) %>%
+  filter(!is.na(Sex), !is.na(AgeInYears)) %>%
+  mutate(
+    Sex_label = case_when(
+      Sex == 1 ~ "Male",
+      Sex == 2 ~ "Female",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(Sex_label)) %>%
+  mutate(
+    Sex_label = factor(Sex_label, levels = c("Male", "Female")),
+    age_group = cut(
+      AgeInYears,
+      breaks = seq(0, 110, by = 10),
+      include.lowest = TRUE,
+      right = FALSE,
+      labels = c(
+        "0-9", "10-19", "20-29", "30-39", "40-49",
+        "50-59", "60-69", "70-79", "80-89", "90-99", "100+"
+      )
+    )
+  ) %>%
   group_by(age_group, Sex_label) %>%
-  summarise(count = n(), .groups = 'drop') %>%
-  # Make female counts negative for left side of pyramid
-  mutate(count = ifelse(Sex_label == "Female", -count, count))
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(
+    Sex_label = droplevels(Sex_label),
+    count = ifelse(Sex_label == "Female", -count, count)
+  )
 
 sample_totals <- pyramid_data %>%
   group_by(Sex_label) %>%
   summarise(total_samples = sum(abs(count)), .groups = 'drop')
 
 # Calculate expected samples based on census proportions
+# You'll need to combine your census data into 10-year age groups too
 expected_data <- cameroon_age_2025 %>%
+  mutate(
+    age_group_10 = case_when(
+      Age %in% c("0-4", "5-9") ~ "0-9",
+      Age %in% c("10-14", "15-19") ~ "10-19",
+      Age %in% c("20-24", "25-29") ~ "20-29",
+      Age %in% c("30-34", "35-39") ~ "30-39",
+      Age %in% c("40-44", "45-49") ~ "40-49",
+      Age %in% c("50-54", "55-59") ~ "50-59",
+      Age %in% c("60-64", "65-69") ~ "60-69",
+      Age %in% c("70-74", "75-79") ~ "70-79",
+      Age %in% c("80-84", "85-89") ~ "80-89",
+      Age %in% c("90-94", "95-99") ~ "90-99",
+      Age == "100+" ~ "100+"
+    )
+  ) %>%
+  group_by(age_group_10) %>%
+  summarise(M = sum(M), F = sum(F), .groups = "drop") %>%
   pivot_longer(cols = c(M, F), names_to = "Sex_label", values_to = "census_count") %>%
   mutate(
     Sex_label = case_when(
       Sex_label == "M" ~ "Male",
       Sex_label == "F" ~ "Female"
-    )
+    ),
+    Sex_label = factor(Sex_label, levels = c("Male", "Female"))
   ) %>%
   left_join(sample_totals, by = "Sex_label") %>%
   mutate(
@@ -557,10 +583,10 @@ expected_data <- cameroon_age_2025 %>%
     expected_count = total_samples * proportion,
     # Make female counts negative for pyramid
     expected_count = ifelse(Sex_label == "Female", -expected_count, expected_count),
-    age_group = factor(Age, levels = c("0-4", "5-9", "10-14", "15-19", "20-24", 
-                                       "25-29", "30-34", "35-39", "40-44", "45-49",
-                                       "50-54", "55-59", "60-64", "65-69", "70-74",
-                                       "75-79", "80-84", "85-89", "90-94", "95-99"))
+    age_group = factor(age_group_10, levels = c(
+      "0-9", "10-19", "20-29", "30-39", "40-49",
+      "50-59", "60-69", "70-79", "80-89", "90-99", "100+"
+    ))
   )
 
 fig1c <- ggplot(pyramid_data, aes(x = age_group, y = count, fill = Sex_label)) +
@@ -572,17 +598,17 @@ fig1c <- ggplot(pyramid_data, aes(x = age_group, y = count, fill = Sex_label)) +
   geom_point(data = expected_data,
              aes(x = age_group, y = expected_count, color = Sex_label),
              size = 3) +
-  scale_y_continuous(labels = abs, 
-                     breaks = seq(-max(abs(pyramid_data$count)), 
-                                 max(abs(pyramid_data$count)), 
-                                 by = 100)) +
+  scale_y_continuous(labels = abs) +
   scale_fill_manual(values = c("Male" = "#b66577", "Female" = "#379392"),
                     name = "Observed") +
   scale_color_manual(values = c("Male" = "#8b4456", "Female" = "#2a6e6d"),
                      name = "Expected (Census)") +
+  guides(
+    fill = guide_legend(override.aes = list(shape = NA)),
+    color = guide_legend(override.aes = list(linetype = 1, shape = 16))
+  ) +
   theme_minimal() +
-  labs(title = "Distribution of Samples by Age Group and Sex with Expected Distribution",
-       x = "Age Group",
+  labs(x = "Age Group",
        y = "Number of Samples") +
   theme(plot.title = element_text(hjust = 0.5, size = 20),
         axis.line = element_line(color = "black", linewidth = 0.7),
@@ -598,3 +624,16 @@ fig1c <- ggplot(pyramid_data, aes(x = age_group, y = count, fill = Sex_label)) +
         legend.title = element_text(size = 20))
 
 print(fig1c)
+
+# use patchwork to combine figures
+(fig1a_with_inset | (fig1b / fig1c)) +
+  plot_layout(widths = c(3, 2), guides = "collect") +
+  plot_annotation(tag_levels = "A") &
+  theme(
+    plot.margin = unit(c(0.2, 0.2, 0.2, 0.2), "cm"),
+    plot.tag = element_text(size = 20, face = "bold", hjust = 0, vjust = 1),
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Figure1.png", 
+       width = 16, height = 8, units = "in", dpi = 300)

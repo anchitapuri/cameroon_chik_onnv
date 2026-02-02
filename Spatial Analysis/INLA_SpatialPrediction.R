@@ -25,12 +25,10 @@ library(rworldmap)
 library(exactextractr)
 library(rworldxtra)
 library(centr)
+library(terra)
 
 # --- Source functions
 source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
-
-# Get Cameroon boundary
-cameroon <- ne_countries(country = "Cameroon", returnclass = "sf")
 
 # Population and mosquito rasts
 anopheles_funestus <- rast('2010_Anopheles_funestus_CMR.tiff')
@@ -71,30 +69,34 @@ meta_data_with_labels$Easting <- meta_data_with_coords$Easting
 meta_data_with_labels$Northing <- meta_data_with_coords$Northing
 
 model_data <- meta_data_with_labels
-
+colnames(model_data)
 
 
 # --- Run INLA model for ONNV (with historic year of intro 1900)
-onnv_results <- run_inla(
+# --- Use population raster for prediction grid
+onnv_results_pop_grid <- run_inla(
   year_intro = 1900,
   data = model_data,
-  cameroon = cameroon,
+  cam_pop = cam_pop,
   positive_col = "ONNV_pos")
 
+                         
+# --- Save best model results 
+saveRDS(onnv_results_pop_grid, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/ONNV_INLAResults.rds')
 
 
 # --- Index of prediction and estimation stacks 
-index_pred_onnv <- inla.stack.index(onnv_results$stk.full, "pred")$data
+index_pred_onnv <- inla.stack.index(onnv_results_pop_grid$stk.full, "pred")$data
 length(index_pred_onnv)
-index_est_onnv <- inla.stack.index(onnv_results$stk.full, "est")$data
+index_est_onnv <- inla.stack.index(onnv_results_pop_grid$stk.full, "est")$data
 length(index_est_onnv)
-str(cam_pop)
-head(cam_pop)
 
 
 
 # --- Extract and plot FOI
-foi_onnv <- extract_and_plot_foi(onnv_results, onnv_results$coop, pathogen_name = "ONNV")
+foi_onnv <- extract_and_plot_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
+# overall FOI
+est_cameroonwide_foi <-exp(onnv_results_pop_grid$output$summary.fixed$mean)
 
 
 # --- Prob of seropositive proportion 
@@ -116,10 +118,10 @@ if (grepl("\\+", age_groups$age_string[nrow(age_groups)])) {
   age_groups$age_upper[nrow(age_groups)] <- 120  # or whatever max age you want
 }
 
-
+# Plot
 sero_onnv <- plot_predicted_seroprevalence(
   foi_result = foi_onnv,
-  model = onnv_results,
+  model = onnv_results_pop_grid,
   age_groups = age_groups,
   age_weights = w_age,
   crs = 32633,
@@ -127,10 +129,11 @@ sero_onnv <- plot_predicted_seroprevalence(
 )
 
 
+
 # --- Annual Infections 
 infections_onnv <- plot_predicted_annual_infections(
   foi_result = foi_onnv,
-  model = onnv_results,
+  model = onnv_results_pop_grid,
   age_groups = age_groups,
   cam_pop = cam_pop,  # Your spatial population data
   age_weights = w_age,  # Age distribution weights
@@ -140,55 +143,71 @@ infections_onnv <- plot_predicted_annual_infections(
 
 # Access results
 infections_onnv$total_infections  # Total infections across all locations
-infections_onnv$infections_by_age  # Breakdown by age group
-infections_onnv$infections_range  # Min and max by location
+infections_onnv$susceptible_people  # Breakdown by age group
+infections_onnv$seropositive_people  # Min and max by location
 
-# Check spacing between prediction points (in km)
-pred_coords_df <- data.frame(
-  X = onnv_results$coop[, "X"],
-  Y = onnv_results$coop[, "Y"]
+
+
+# --- Validate model----
+avg_susceptible_by_age <- numeric(n_age_groups)
+
+for (j in 1:n_age_groups) {
+  a_lower <- age_groups$age_lower[j]
+  a_upper <- age_groups$age_upper[j]
+  age_width <- a_upper - a_lower
+  
+  if (est_cameroonwide_foi > 1e-10) {
+    avg_susceptible_by_age[j] <- (1/(est_cameroonwide_foi * age_width)) * 
+                                  (exp(-est_cameroonwide_foi * a_lower) - 
+                                   exp(-est_cameroonwide_foi * a_upper))
+  } else {
+    avg_susceptible_by_age[j] <- 1
+  }
+}
+
+
+# Weight by age distribution to get overall average susceptible
+cameroon_avg_susceptible <- sum(avg_susceptible_by_age * w_age)
+cameroon_avg_susceptible
+est_cameroonwide_foi
+
+cameroon_avg_seroprev = 1 - cameroon_avg_susceptible
+cameroon_avg_seroprev
+
+total_cameroon_pop <- sum(values(cam_pop), na.rm = TRUE)  # ~26 million
+expected_infections <- total_cameroon_pop * est_cameroonwide_foi * cameroon_avg_susceptible
+
+sum(cameroon_age_2025$total)
+
+
+# --- pop at predicted locations
+pred_coords_sf <- st_as_sf(
+  data.frame(X = onnv_results$coop[, "X"] * 1000, 
+              Y = onnv_results$coop[, "Y"] * 1000),
+  coords = c("X", "Y"),
+  crs = 32633
 )
+# transform to match the cam_pop raster
+pred_coords_transformed <- sf::st_transform(pred_coords_sf, crs = terra::crs(cam_pop))
 
-# Calculate typical spacing
-x_spacing <- median(diff(sort(unique(pred_coords_df$X))))
-y_spacing <- median(diff(sort(unique(pred_coords_df$Y))))
+# population raster has 13,710 × 9,233 = 126+ million cells
+# 15,035 prediction points
+# sampling less than 0.01% of the cells
+# aggregate population to match your grid resolution
+cam_pop_agg <- terra::aggregate(cam_pop, fact = 60, fun = sum, na.rm = TRUE)
 
-print(paste("Grid spacing: X =", x_spacing, "km, Y =", y_spacing, "km"))
+pop_at_locations <- terra::extract(cam_pop_agg, pred_coords_transformed, ID = FALSE)
 
-# Use half the grid spacing as buffer radius
-buffer_radius_km <- min(x_spacing, y_spacing) / 2
-buffer_radius_deg <- buffer_radius_km / 111  # Convert km to degrees (approx)
+# 1. Check population coverage
+captured_pop <- sum(pop_at_locations, na.rm = TRUE)
+total_pop <- sum(values(cam_pop), na.rm = TRUE)
+cat("Population captured: ", round(captured_pop/total_pop * 100, 1), "%\n")
 
-# Then extract with this buffer
-pred_coords_transformed <- st_transform(pred_coords_sf, crs = crs(cam_pop))
-
-
-pred_buffers <- st_buffer(pred_coords_transformed, dist = buffer_radius_deg)
-pop_extraction <- terra::extract(cam_pop, pred_buffers, fun = sum, na.rm = TRUE)
-
-print(head(pop_extraction))
-print(dim(pop_extraction))
-print(names(pop_extraction))
-
-st_crs(pred_coords_sf)
-crs(cam_pop)
-
-pop_at_locations <- pop_extraction[, 2]
-range(pop_at_locations, na.rm = TRUE)
-sum(pop_at_locations, na.rm = TRUE)
+# 2. Check weighted average FOI
+weighted_avg_foi <- sum(lambda_pred * pop_at_locations, na.rm = TRUE) / sum(pop_at_locations, na.rm = TRUE)
+cat("Cameroon-wide FOI: ", est_cameroonwide_foi, "\n")
+cat("Population-weighted FOI: ", weighted_avg_foi, "\n")
 
 
 
 
-
-# --- Model fits 
-plot_age_seroprevalence_model_fits(onnv_results$year, onnv_results$output, model_data, "ONNV_pos")
-
-
-                         
-# --- Save best model results 
-saveRDS(onnv_results, 'ONNV_INLAResults.rds', compress = "gzip")
-
-
-
-# --- Mosquito and population proportion vs proportion positive 

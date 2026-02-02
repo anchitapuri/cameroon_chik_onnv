@@ -1,6 +1,6 @@
 
 # ---- Function for INLA models ----
-run_inla <- function(year_intro, data, cameroon, positive_col) {
+run_inla <- function(year_intro, data, cam_pop, positive_col) {
   
   # Calculate years of exposure
   data$age_intro <- data$year_of_survey - year_intro
@@ -34,14 +34,16 @@ run_inla <- function(year_intro, data, cameroon, positive_col) {
   )
   
   # Prediction Grid
-  grid        <- st_make_grid(cameroon, cellsize = 0.05, what = "centers")
-  grid_sf     <- st_sf(grid_id = seq_along(grid), geometry = grid)
-  grid_inside <- st_intersection(grid_sf, cameroon)
-  grid_inside <- grid_inside[order(grid_inside$grid_id), ]  
-  grid_utm    <- st_transform(grid_inside, crs = 32633)
-  coop_utm    <- st_coordinates(grid_utm)
+  cam_pop_agg <- terra::aggregate(cam_pop, fact = 10, fun = sum, na.rm = TRUE)
+  cam_pop_points <- terra::as.points(cam_pop_agg, values = TRUE, na.rm = TRUE)
+
+  # Convert to sf and transform to UTM 33N
+  cam_pop_sf <- st_as_sf(cam_pop_points)
+  cam_pop_utm <- st_transform(cam_pop_sf, crs = 32633)
+  coords_utm <- st_coordinates(cam_pop_utm)
+  
   # For INLA - convert to km (INLA works better with smaller numbers)
-  coop <- coop_utm / 1000
+  coop <- coords_utm / 1000
   colnames(coop) <- c("X", "Y")
   
   # Build SPDE model
@@ -93,30 +95,6 @@ run_inla <- function(year_intro, data, cameroon, positive_col) {
     cooe = cooe,
     coop = coop
   ))
-}
-
-
-# --- Propotion by mosquito distribution + log population 
-calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, breaks_min) {
-  var_mid <- rep(NaN, length(breaks_max))
-  prop_pos <- matrix(NaN, length(breaks_max), 3)
-  
-  for (i in 1:length(breaks_max)) {
-    tmp <- which(data[[var_col]] < breaks_max[i] & data[[var_col]] >= breaks_min[i])
-    if (length(tmp) > 5) {
-      prop_pos[i, 1] <- mean(data[[positive_col]][tmp], na.rm = TRUE)
-      a <- prop.test(sum(data[[positive_col]][tmp]), length(tmp))
-      prop_pos[i, 2:3] <- a$conf.int
-      var_mid[i] <- mean(data[[var_col]][tmp], na.rm = TRUE)
-    }
-  }
-  
-  data.frame(
-    x = var_mid,
-    y = prop_pos[, 1],
-    ymin = prop_pos[, 2],
-    ymax = prop_pos[, 3]
-  )
 }
 
 
@@ -265,85 +243,115 @@ plot_predicted_seroprevalence <- function(foi_result, model, age_groups, age_wei
 
 # --- Function to extract and plot annual infections ---
 plot_predicted_annual_infections <- function(foi_result, model, age_groups, age_weights, cam_pop, 
-crs = 32633, pathogen_name = "ONNV") {
-  # Calculate total population by age group (M + F)
-  N_age <- cameroon_age_2025$M + cameroon_age_2025$F
+                                             agg_factor = 10, crs = 32633, pathogen_name = "ONNV") {
   
-  # Get lambda (FOI) at each location
-  lambda_pred <- foi_result$foi_sf$foi
+  # Aggregate population raster to manageable resolution
+  cam_pop_agg <- terra::aggregate(cam_pop, fact = agg_factor, fun = sum, na.rm = TRUE)
   
-  # Initialize matrix to store infections by location and age group
-  n_locations <- length(lambda_pred)
-  n_age_groups <- nrow(age_groups)
+  # Transform FOI sf to match cam_pop CRS before rasterizing
+  foi_sf_transformed <- st_transform(foi_result$foi_sf, crs = terra::crs(cam_pop_agg))
   
-  
-  # Convert prediction locations to sf if not already
-  pred_coords_sf <- st_as_sf(
-    data.frame(X = model$coop[, "X"] * 1000, 
-               Y = model$coop[, "Y"] * 1000),
-    coords = c("X", "Y"),
-    crs = crs
+  # Convert FOI predictions to raster matching the population grid
+  foi_raster <- terra::rasterize(
+    terra::vect(foi_sf_transformed),
+    cam_pop_agg,
+    field = "foi",
+    fun = mean
   )
-
-  pop_at_locations <- terra::extract(cam_pop, pred_coords_sf, ID = FALSE)[,1]
-  infections_by_age <- matrix(0, nrow = n_locations, ncol = n_age_groups)
   
-  # Calculate infections for each location and age group
-  # Formula: N(a) × lambda × exp(-lambda × age)
-  for (i in 1:n_locations) {
-    lambda <- lambda_pred[i]
-    total_pop <- pop_at_locations[i]
-
-    if (total_pop == 0 || is.na(total_pop)) next
+  # Extract values from both rasters as vectors
+  cam_pop_vals <- terra::values(cam_pop_agg, mat = FALSE)
+  foi_vals <- terra::values(foi_raster, mat = FALSE)
+  
+  # Get coordinates of raster cells for plotting later
+  coords_xy <- terra::xyFromCell(cam_pop_agg, 1:terra::ncell(cam_pop_agg))
+  
+  # Initialize
+  n_cells <- length(cam_pop_vals)
+  n_age_groups <- nrow(age_groups)
+  infections_by_age <- matrix(0, nrow = n_cells, ncol = n_age_groups)
+  seroprevalence_by_age <- matrix(0, nrow = n_cells, ncol = n_age_groups)
+  susceptible_by_age <- matrix(0, nrow = n_cells, ncol = n_age_groups)
+  
+  # Calculate infections for each cell and age group
+  for (i in 1:n_cells) {
+    total_pop <- cam_pop_vals[i]
+    lambda <- foi_vals[i]
+    
+    # Skip if missing data or zero population
+    if (is.na(total_pop) || is.na(lambda) || total_pop == 0) next
+    
+    for (j in 1:n_age_groups) {
+      a_lower <- age_groups$age_lower[j]
+      a_upper <- age_groups$age_upper[j]
+      age_width <- a_upper - a_lower
       
-      for (j in 1:n_age_groups) {
-        a_lower <- age_groups$age_lower[j]
-        a_upper <- age_groups$age_upper[j]
-        age_width <- a_upper - a_lower
-
       # Population in this age group at this location
-      # Distribute total population according to national age distribution
-        N_age_loc <- total_pop * age_weights[j]
+      N_age_loc <- total_pop * age_weights[j]
       
-      # Average annual incidence in this age group
-      # This is λ × average susceptible proportion
-      # Average S(a) = (1/(λΔa)) × [exp(-λa_lower) - exp(-λa_upper)]
-        if (lambda > 1e-10) {
-          avg_susceptible <- (1/(lambda * age_width)) * 
-                            (exp(-lambda * a_lower) - exp(-lambda * a_upper))
-        } else {
-          # For very small lambda, S(a) ≈ 1
-          avg_susceptible <- 1
-        }
-        
-        # Annual infections = Population × FOI × Average susceptible
-        infections_by_age[i, j] <- N_age_loc * lambda * avg_susceptible
+      # Average susceptible proportion in this age group
+      # S(a) = exp(-λa)
+      if (lambda > 1e-10) {
+        avg_susceptible_prop <- (1/(lambda * age_width)) * 
+                               (exp(-lambda * a_lower) - exp(-lambda * a_upper))
+      } else {
+        avg_susceptible_prop <- 1
       }
-    }
       
-
-  # Sum across age groups to get total annual infections per location
+      # Average seroprevalence = 1 - average susceptible
+      avg_seroprev_prop <- 1 - avg_susceptible_prop
+      
+      # Store proportions for this cell and age group
+      susceptible_by_age[i, j] <- avg_susceptible_prop
+      seroprevalence_by_age[i, j] <- avg_seroprev_prop
+      
+      # Annual infections = Population × FOI × Average susceptible
+      infections_by_age[i, j] <- N_age_loc * lambda * avg_susceptible_prop
+    }
+  }
+  
+  # Sum across age groups to get total annual infections per cell
   annual_infections <- rowSums(infections_by_age)
   total_annual_infections <- sum(annual_infections)
-
-  # Create dataframe with prediction coordinates
-  infections_df <- data.frame(
-    X_km = model$coop[, "X"],
-    Y_km = model$coop[, "Y"],
-    infections = annual_infections,
-    population = pop_at_locations
-  )
   
-  # Convert to sf object (convert km back to meters for proper CRS)
+  # Calculate overall susceptible and seroprevalence weighted by population and age
+  # For each cell, weight by age distribution
+  susceptible_prop_by_cell <- as.vector(susceptible_by_age %*% age_weights)
+  seroprev_prop_by_cell <- as.vector(seroprevalence_by_age %*% age_weights)
+  
+  # Calculate Cameroon-wide proportions weighted by population
+  total_pop_cameroon <- sum(cam_pop_vals, na.rm = TRUE)
+  
+  # For each cell: proportion × population = number of people
+  susceptible_people <- susceptible_prop_by_cell * cam_pop_vals
+  seropositive_people <- seroprev_prop_by_cell * cam_pop_vals
+  
+  # Sum across all cells and divide by total population
+  cameroon_susceptible_prop <- sum(susceptible_people, na.rm = TRUE) / total_pop_cameroon
+  cameroon_seropositive_prop <- sum(seropositive_people, na.rm = TRUE) / total_pop_cameroon
+  
+  cat("\n=== Cameroon-wide Summary ===\n")
+  cat("Total population: ", scales::comma(round(total_pop_cameroon)), "\n")
+  cat("Proportion susceptible (seronegative): ", round(cameroon_susceptible_prop * 100, 2), "%\n")
+  cat("Proportion seropositive (immune): ", round(cameroon_seropositive_prop * 100, 2), "%\n")
+  cat("Total annual infections: ", scales::comma(round(total_annual_infections)), "\n")
+  cat("=============================\n\n")
+  
+  # Create sf object for plotting (only non-zero infection cells to reduce size)
+  valid_cells <- which(annual_infections > 0)
+  
   infections_sf <- st_as_sf(
-    data.frame(X = infections_df$X_km * 1000, 
-               Y = infections_df$Y_km * 1000),
+    data.frame(
+      X = coords_xy[valid_cells, 1],
+      Y = coords_xy[valid_cells, 2],
+      infections = annual_infections[valid_cells],
+      population = cam_pop_vals[valid_cells],
+      susceptible_prop = susceptible_prop_by_cell[valid_cells],
+      seroprevalence = seroprev_prop_by_cell[valid_cells]
+    ),
     coords = c("X", "Y"),
-    crs = crs
+    crs = terra::crs(cam_pop_agg)
   )
-  infections_sf$infections <- infections_df$infections
-  infections_sf$population <- infections_df$population
-
   
   # Plot
   p <- ggplot() +
@@ -352,12 +360,15 @@ crs = 32633, pathogen_name = "ONNV") {
     scale_color_viridis_c(
       option = "plasma",
       name = "Annual\nInfections",
-      trans = "log10",  # Log scale often better for infections
+      trans = "log10",
       labels = scales::comma_format()
     ) +
     labs(
       title = paste0("Predicted Annual Infections - ", pathogen_name),
-      subtitle = paste0("Total: ", scales::comma(round(total_annual_infections))),
+      subtitle = paste0("Total: ", scales::comma(round(total_annual_infections)), 
+                       #" | Seropositive: ", round(cameroon_seropositive_prop * 100, 1), 
+                       "% | Susceptible: ", round(cameroon_susceptible_prop * 100, 1), "%"
+       ),
       x = "Longitude",
       y = "Latitude"
     ) +
@@ -370,7 +381,7 @@ crs = 32633, pathogen_name = "ONNV") {
   
   print(p)
   
-  # Calculate infections by age group (summed across all locations)
+  # Calculate infections by age group (summed across all cells)
   total_infections_by_age <- colSums(infections_by_age)
   
   age_group_summary <- data.frame(
@@ -388,12 +399,299 @@ crs = 32633, pathogen_name = "ONNV") {
     infections_range = range(annual_infections[annual_infections > 0]),
     total_infections = total_annual_infections,
     infections_by_age = age_group_summary,
-    infections_matrix = infections_by_age
+    infections_matrix = infections_by_age,
+    population_captured = total_pop_cameroon,
+    cameroon_susceptible_prop = cameroon_susceptible_prop,
+    cameroon_seropositive_prop = cameroon_seropositive_prop,
+    susceptible_people = sum(susceptible_people, na.rm = TRUE),
+    seropositive_people = sum(seropositive_people, na.rm = TRUE)
   ))
 }
 
+
+# --- Prevelance Patterns 
+
+# ---- Plot proportion positive by age 
+plot_age_seroprevalence <- function(data, chains_df, infM, pathogen_col, pathogen_name) {
+  
+  # Find which components have pathogen_col = 1
+  nC <- nrow(infM)
+  positive_components <- which(infM[, pathogen_col] == 1)
+  
+  # Age groups
+  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
+  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
+  
+  # Filter out NA ages and track which rows we're keeping
+  data_plot <- data %>%
+    mutate(original_row = row_number()) %>%  # Track original indices
+    filter(!is.na(AgeInYears))  # Remove rows with NA ages
+  
+  # Get the indices of rows we're keeping
+  kept_indices <- data_plot$original_row
+  N_kept <- length(kept_indices)
+  
+  data_plot$age_group <- cut(
+    data_plot$AgeInYears,
+    breaks = age_breaks,
+    labels = age_labels,
+    include.lowest = TRUE,
+    right = FALSE
+  )
+  
+  # Extract probabilities ONLY for individuals we're keeping
+  prob_cols_list <- lapply(positive_components, function(comp) {
+    sprintf("post_prob[%d,%d]", kept_indices, comp)  # Use kept_indices instead of 1:N
+  })
+  
+  # Sum probabilities across all positive components for each draw
+  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
+    as.matrix(chains_df[, cols])
+  }))
+  
+  n_draws <- nrow(probs_all_draws)
+  
+  # Calculate prevalence by year and age group for each draw
+  prevalence_draws <- map_dfr(1:n_draws, function(draw_num) {
+    probs_this_draw <- probs_all_draws[draw_num, ]
+    
+    data_plot %>%
+      dplyr::mutate(prob_pos = probs_this_draw) %>%
+      group_by(year_of_survey, age_group) %>%
+      summarise(
+        prevalence = mean(prob_pos, na.rm = TRUE),
+        n = n(),
+        .groups = "drop"
+      ) %>%
+      dplyr::mutate(draw = draw_num)
+  })
+  
+  # Summarize across draws
+  obs <- prevalence_draws %>%
+    group_by(year_of_survey, age_group) %>%
+    summarise(
+      proportion_positive = median(prevalence),
+      obs_lower = quantile(prevalence, 0.025),
+      obs_upper = quantile(prevalence, 0.975),
+      n = first(n),
+      .groups = "drop"
+    )
+  
+  y_limits <- if (pathogen_name == "CHIK") c(0, 0.08) else c(0, 0.8)
+  
+  p <- ggplot(obs, aes(x = age_group)) +
+    geom_errorbar(aes(ymin = obs_lower, ymax = obs_upper), 
+                  width = 0.15, linewidth = 0.8,color = '#057cfc') +      
+    geom_point(aes(y = proportion_positive), size = 2, color = '#057cfc') +  
+    facet_wrap(~ year_of_survey, ncol = 5) +
+    scale_y_continuous(limits = y_limits) +
+    labs(
+      x = "Age group",
+      y = "Seroprevalence",
+      title = paste("Model-estimated seroprevalence by age -", pathogen_name)
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20),
+      axis.line = element_line(color = "black", linewidth = 0.7),
+      axis.ticks = element_line(color = "black", size = 0.5),
+      panel.grid = element_blank(),
+      axis.text = element_text(size = 20),
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
+      axis.title = element_text(size = 24),
+      aspect.ratio = 2,
+      strip.text = element_text(size = 20),
+    )
+  
+  print(p)
+  return(list(plot = p, data = obs, draws = prevalence_draws))
+}
+
 # --- Seroprevalence by age group by year - model fits ---
-plot_age_seroprevalence_model_fits <- function(year_intro, result,data, positive_col) {
+plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_df, infM, pathogen_col) {
+  
+  # Recreate the filtered dataset used in the model
+  data_plot                   <- subset(data, !is.na(Latitude) & !is.na(Longitude))
+  data_plot$year_of_survey    <- as.numeric(substr(data_plot$Sample, 1, 4))
+  data_plot$age_intro         <- data_plot$year_of_survey - year_intro
+  data_plot$years_of_exposure <- pmin(data_plot$age_intro, data_plot$AgeInYears)
+  data_plot <- subset(data_plot, !is.na(years_of_exposure) & years_of_exposure > 0)
+  
+  # Track original row numbers before any filtering
+  data_plot$original_row <- as.numeric(rownames(data_plot))
+  
+  # Age groups
+  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
+  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30",
+                  "31-39", "40-49", "50+")
+  data_plot$age_group <- cut(
+    data_plot$AgeInYears,
+    breaks = age_breaks,
+    labels = age_labels,
+    include.lowest = TRUE,
+    right = FALSE
+  )
+  
+  # Attach fitted values from estimation stack (INLA predictions)
+  idx_est <- inla.stack.index(result$stk.full, tag = "est")$data
+  fit     <- result$output$summary.fitted.values[
+    idx_est, c("mean", "0.025quant", "0.975quant")
+  ]
+  
+  cat("Fit dimensions:", nrow(fit), "x", ncol(fit), "\n")
+
+  # Basic alignment checks
+  if (!is.data.frame(fit))
+    stop("fit is not a data.frame. Check result$output$summary.fitted.values.")
+  if (nrow(fit) != nrow(data_plot)) {
+    stop(sprintf(
+      "Row mismatch. fit=%d, data_plot=%d. Build data_plot in the exact order used to make the stack.",
+      nrow(fit), nrow(data_plot)
+    ))
+  }
+  
+  # Attach INLA predicted probabilities to each individual
+  data_plot$predicted  <- fit$mean
+  data_plot$pred_lower <- fit$`0.025quant`
+  data_plot$pred_upper <- fit$`0.975quant`
+  
+  # ---- Observed summaries using posterior probabilities from chains ----
+  # Find which components have pathogen_col = 1
+  nC <- nrow(infM)
+  positive_components <- which(infM[, pathogen_col] == 1)
+  
+  # Get the indices we're keeping (after all filtering)
+  kept_indices <- data_plot$original_row
+  N_kept <- length(kept_indices)
+  
+  # Extract probabilities ONLY for individuals we're keeping
+  prob_cols_list <- lapply(positive_components, function(comp) {
+    sprintf("post_prob[%d,%d]", kept_indices, comp)
+  })
+  
+  # Sum probabilities across all positive components for each draw
+  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
+    as.matrix(chains_df[, cols])
+  }))
+  
+  n_draws <- nrow(probs_all_draws)
+  
+  # Calculate prevalence by year and age group for each draw
+  prevalence_draws <- purrr::map_dfr(1:n_draws, function(draw_num) {
+    probs_this_draw <- probs_all_draws[draw_num, ]
+    data_plot %>%
+      dplyr::mutate(prob_pos = probs_this_draw) %>%
+      group_by(year_of_survey, age_group) %>%
+      summarise(
+        prevalence = mean(prob_pos, na.rm = TRUE),
+        n = n(),
+        .groups = "drop"
+      ) %>%
+      dplyr::mutate(draw = draw_num)
+  })
+  
+  # Summarize observed data across draws
+  obs <- prevalence_draws %>%
+    group_by(year_of_survey, age_group) %>%
+    summarise(
+      obs_mean = median(prevalence),
+      obs_lower = quantile(prevalence, 0.025),
+      obs_upper = quantile(prevalence, 0.975),
+      n = first(n),
+      .groups = "drop"
+    )
+
+  cat("Obs summary rows:", nrow(obs), "\n")
+  print(head(obs))
+  
+  # ---- Predicted summaries (mean of INLA predicted probabilities) ----
+  pred <- aggregate(
+    cbind(predicted, pred_lower, pred_upper) ~ year_of_survey + age_group,
+    data_plot,
+    mean,
+    na.rm = TRUE
+  )
+  print(head(pred))
+  
+  # ---- Plot ----
+  p <- ggplot() +
+    # observed (from posterior probabilities)
+    geom_point(
+      data = obs,
+      aes(x = age_group, y = obs_mean, color = "Observed"),
+      size = 2, 
+      color = "#0d1b2a"
+    ) +
+    geom_errorbar(
+      data = obs,
+      aes(x = age_group, ymin = obs_lower, ymax = obs_upper),
+      width = 0.15, 
+      color = '#0d1b2a'
+    ) +
+    # predicted (INLA model fits)
+    geom_point(
+      data = pred,
+       aes(x = age_group, y = predicted, color = "Estimated"),
+      color = "#0a9396",
+      size = 2
+    ) +
+    geom_errorbar(
+      data = pred,
+      aes(x = age_group, ymin = pred_lower, ymax = pred_upper),
+      color = "#0a9396",
+      width = 0.15
+    ) +
+    facet_wrap(~ year_of_survey, ncol = 5) +
+    labs(
+      x = "Age group",
+      y = "Proportion seropositive",
+      title = "Observed vs fitted seroprevalence by age group",
+      subtitle = paste0(
+        "Pathogen column: ", pathogen_col,
+        " | Year of introduction: ", year_intro
+      )
+    ) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(hjust = 0.5),
+      aspect.ratio = 1
+    )
+  
+  print(p)
+  invisible(list(plot = p, obs = obs, pred = pred, prevalence_draws = prevalence_draws))
+}
+
+# --- Propotion by mosquito distribution + log population 
+calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, breaks_min) {
+  var_mid <- rep(NaN, length(breaks_max))
+  prop_pos <- matrix(NaN, length(breaks_max), 3)
+  
+  for (i in 1:length(breaks_max)) {
+    tmp <- which(data[[var_col]] < breaks_max[i] & data[[var_col]] >= breaks_min[i])
+    if (length(tmp) > 5) {
+      prop_pos[i, 1] <- mean(data[[positive_col]][tmp], na.rm = TRUE)
+      a <- prop.test(sum(data[[positive_col]][tmp]), length(tmp))
+      prop_pos[i, 2:3] <- a$conf.int
+      var_mid[i] <- mean(data[[var_col]][tmp], na.rm = TRUE)
+    }
+  }
+  
+  data.frame(
+    x = var_mid,
+    y = prop_pos[, 1],
+    ymin = prop_pos[, 2],
+    ymax = prop_pos[, 3]
+  )
+}
+
+
+
+
+# OLD FUNCTIONS 
+
+# --- Seroprevalence by age group by year - model fits ---
+old_plot_age_seroprevalence_model_fits <- function(year_intro, result,data, positive_col) {
   # Recreate the filtered dataset used in the model
   data_plot                   <- subset(data, !is.na(Latitude) & !is.na(Longitude))
   data_plot$year_of_survey    <- as.numeric(substr(data_plot$Sample, 1, 4))

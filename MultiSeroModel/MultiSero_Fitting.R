@@ -64,6 +64,8 @@ preprocessed_data <- prepare_multiplex_sero_data(
   present_pathogens = c("ONNV_VLP_log","CHIKV_sE2_log")
 )
 
+saveRDS(preprocessed_data, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_alpha.rds')
+
 #--- chain starting values
 ini <- init_diffSds(preprocessed_data$data, nChains = 3)
 
@@ -114,15 +116,6 @@ print(p_CR)
 p_sero <- plot_seroprevalence(chains_df)
 print(p_sero)
 
-# plot age seroprevalence (statified by survey year)
-meta_data$year_of_survey <- as.numeric(substr(meta_data$Sample, 1, 4))
-unique(meta_data$year_of_survey)
-sum(is.na(meta_data$AgeInYears))
-
-quartz(width = 18, height = 14)
-plot_age_seroprevalence(meta_data, chains_df, infM = preprocessed_data$data$infM,
-                       pathogen_col = 1,  # column 'a' for ONNV
-                       pathogen_name = "ONNV")
 
 
 # --- Cluster assignment based on max probability - For INLA analysis 
