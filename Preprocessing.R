@@ -431,17 +431,30 @@ colnames(cam_pop_df) <- c("x", "y", "pop_density")
 # Create the population density inset map
 inset_map <- ggplot(cam_pop_df, aes(x = x, y = y, fill = pop_density)) +
   geom_raster() +
-  scale_fill_viridis_c(name = "Population\nDensity", 
+  scale_fill_viridis_c(name = "Log Population Density (per km²)", 
                        option = "plasma",
                        trans = "log10",
-                       na.value = "transparent") +
+                       na.value = "transparent",
+                       breaks = c(1, 10, 100, 1000, 10000),          # set the tick positions
+                       labels = c("1", "10", "100", "1,000", "10,000"),
+                       guide = guide_colorbar(
+                       barheight = unit(0.2, "cm"),      # thin (horizontal)
+                       barwidth = unit(6.5, "cm"),       # wide (horizontal)
+                       ticks = TRUE,
+                       title.position = "top",
+                       label.position = "bottom",
+                       ticks.length = unit(0.1, "cm"),
+                       title.vjust = 0.5)) +
   coord_equal() +
-  labs(title = "Log Population Density") +
   theme_void() +
   theme(
-    legend.position = "none",
-    plot.background = element_rect(fill = "white", color = "black", linewidth = 0.5),
-    plot.margin = margin(3, 3, 3, 3)
+     legend.position = c(0.5, 0.05),   
+     legend.text = element_text(size = 11),
+     legend.title = element_text(size = 11),
+     legend.direction = "horizontal",    
+     legend.margin = margin(20, 0, 0, 0),  # adds space above the legend
+     plot.background = element_rect(fill = "white", color = "black", linewidth = 0.5),
+     plot.margin = margin(10, 5, 15, 5)
   )
 
 # Figure 1a: Map of Cameroon with sample collection locations
@@ -449,31 +462,46 @@ fig1a <- ggplot() +
   geom_sf(data = sf_meta_data_with_coords_pw, fill = "#ffffff", color = "#6d7275") +
   geom_point(data = location_counts, 
              aes(x = Longitude, y = Latitude, size = n_samples),
-             color = "#00798c", alpha = 0.9) +
-  scale_size_continuous(name = "Number of Samples", range = c(2, 10),
-                        breaks = seq(0, max(location_counts$n_samples), by = 30), limits = c(0, max(location_counts$n_samples)))  +
-  theme_minimal() +
-  labs(x = "Longitude", y = "Latitude") +
+             shape = 21, fill = "#015b69", colour = "white", alpha = 0.85) +
+  scale_size_continuous(name = "Number of \nSamples", range = c(2, 10),
+                        breaks = seq(0, max(location_counts$n_samples), by = 30), limits = c(0, max(location_counts$n_samples))) +
+  annotation_scale(
+    plot_unit = "km",
+    bar_cols = c("black", "white"),  # alternating black/white like the reference
+    height = unit(0.2, "cm"),
+    text_family = "sans",
+    pad_y = unit(0.8, "cm"),
+    text_cex = 1.5      
+  ) +
+  theme_minimal()  +
   theme(
     panel.grid = element_blank(),
-    plot.title = element_text(hjust = 0.5, size = 24),  
-    axis.title.x = element_text(size = 24),                             # X-axis label
-    axis.title.y = element_text(size = 24),                             # Y-axis label
-    axis.text.x = element_text(size = 20),                              # X-axis tick labels
-    axis.text.y = element_text(size = 20),                              # Y-axis tick labels
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
     legend.title = element_text(size = 20),                             # Legend title
-    legend.text = element_text(size = 20)                               # Legend text
+    legend.text = element_text(size = 20) ,                              # Legend text
+    legend.position = c(0.97, 0.4)
   )
 
 # Add the inset map using patchwork
 fig1a_with_inset <- fig1a +
   inset_element(inset_map, 
-                left = 0.05, bottom = 0.60, 
-                right = 0.45, top = 1,
-                align_to = "panel")
-
+    left = -0.12,              # push it further left
+    bottom = 0.50, 
+    right = 0.42,              # narrow the right edge
+    top = 1.02,
+    align_to = "panel")
 print(fig1a_with_inset)
 
+# --- Save Figure 1a
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1a.png", 
+       plot = fig1a_with_inset,
+       width = 10, 
+       height = 10, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
 
 # Figure 1b: Number of samples by year of survey
 fig1b <- sf_meta_data_with_coords_pw %>%
@@ -481,7 +509,8 @@ fig1b <- sf_meta_data_with_coords_pw %>%
   group_by(year_of_survey) %>%
   summarise(n_samples = n()) %>%
   ggplot(aes(x = factor(year_of_survey), y = n_samples)) +
-  geom_bar(stat = "identity", fill = "#00798c") +
+    scale_y_continuous(limits = c(0, 1650)) +   
+  geom_bar(stat = "identity", fill = "#015b69") +
   geom_text(size = 8, aes(label = n_samples), vjust = -0.5) +
   theme_minimal() +
   labs(x = "Year of Survey",
@@ -501,6 +530,13 @@ fig1b <- sf_meta_data_with_coords_pw %>%
   )
 
 print(fig1b)
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1b.png", 
+       plot = fig1b,    # swap this for your actual plot object name
+       width = 7, 
+       height = 10, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
 
 # Figure 1c: Male vs Female by Age
 # Recode Sex variable (1 = Male, 2 = Female)
@@ -599,9 +635,9 @@ fig1c <- ggplot(pyramid_data, aes(x = age_group, y = count, fill = Sex_label)) +
              aes(x = age_group, y = expected_count, color = Sex_label),
              size = 3) +
   scale_y_continuous(labels = abs) +
-  scale_fill_manual(values = c("Male" = "#b66577", "Female" = "#379392"),
+  scale_fill_manual(values = c("Male" = "#b84f74", "Female" = "#00798c"),
                     name = "Observed") +
-  scale_color_manual(values = c("Male" = "#8b4456", "Female" = "#2a6e6d"),
+  scale_color_manual(values = c("Male" = "#7c334d", "Female" = "#014751"),
                      name = "Expected (Census)") +
   guides(
     fill = guide_legend(override.aes = list(shape = NA)),
@@ -624,16 +660,25 @@ fig1c <- ggplot(pyramid_data, aes(x = age_group, y = count, fill = Sex_label)) +
         legend.title = element_text(size = 20))
 
 print(fig1c)
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1c.png", 
+       plot = fig1c,    # swap for your actual plot object name
+       width = 10, 
+       height = 10, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
 
-# use patchwork to combine figures
-(fig1a_with_inset | (fig1b / fig1c)) +
-  plot_layout(widths = c(3, 2), guides = "collect") +
-  plot_annotation(tag_levels = "A") &
-  theme(
-    plot.margin = unit(c(0.2, 0.2, 0.2, 0.2), "cm"),
-    plot.tag = element_text(size = 20, face = "bold", hjust = 0, vjust = 1),
-    plot.background = element_rect(fill = "white", color = NA)
-  )
 
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Figure1.png", 
-       width = 16, height = 8, units = "in", dpi = 300)
+
+combined <- (fig1a_with_inset | (fig1b / fig1c)) + plot_layout(widths = c(2, 1))
+print(combined)
+
+
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1.png", 
+       plot = combined,    # swap for your actual plot object name
+       width = 18, 
+       height = 12, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
+ 

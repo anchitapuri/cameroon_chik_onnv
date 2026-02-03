@@ -1,5 +1,6 @@
 
-# Prevelance patterns by age 
+library(ggspatial)
+library(cowplot)
 
 # --- Source functions
 source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
@@ -18,9 +19,6 @@ preprocessed_data <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Final
 
 # --- Plot age seroprevalence model fits
 # prepare data for stan
-preprocessed_data$data$infM
-
-
 
 quartz(width = 14, height = 14)
 plot_age_seroprevalence_model_fits(
@@ -34,11 +32,8 @@ plot_age_seroprevalence_model_fits(
 
 
 
-
-
-
 # --- Plot CHIK infection locations 
-chik_pos <- cameroon_data |>
+chik_pos <- onnv_results$data_filtered |>
   dplyr::filter(CHIK_pos == 1)
 
 chik_pos_sf <- st_as_sf(
@@ -59,13 +54,19 @@ cities_sf <- st_as_sf(
   crs = 4326
 )
 
+cameroon_sf <- ne_countries(
+  country = "Cameroon",
+  scale = "medium",
+  returnclass = "sf"
+)
+
 ggplot() +
   geom_sf(
-    data = cameroon_data,
-    fill = "grey95",
-    colour = "grey40",
-    linewidth = 0.3
-  ) +
+  data = cameroon_sf,
+  fill = NA,          # no fill
+  colour = "black",
+  linewidth = 0.6
+) +
   geom_sf(
     data = st_centroid(chik_pos_sf),
     aes(colour = aeg_pw_district),
@@ -73,9 +74,15 @@ ggplot() +
     alpha = 0.8
   ) +
   scale_colour_gradient(
-    low = "yellow",
-    high = "red",
-    name = "Aegypti"
+    low = "#0157b2",
+    high = "#8b3351",
+    name = "Aegypti",
+    guide = guide_colorbar(
+      barheight = unit(2, "cm"),
+      barwidth = unit(0.4, "cm"),
+      ticks = TRUE,
+      ticks.length = unit(0.15, "cm")
+    )
   ) +
   geom_sf(
     data = cities_sf,
@@ -89,12 +96,21 @@ ggplot() +
     values = c("Yaoundé" = "lightblue", "Douala" = "darkblue"),
     name = "Cities"
   ) +
-  theme_minimal() +
-  labs(
-    title = "CHIK-positive samples in Cameroon",
-    subtitle = "Point color shows Aedes aegypti levels"
+  annotation_scale(
+    location = "bl",        # bottom-left
+    width_unit = "km",
+    bar_cols = c("black", "white"),  # alternating black/white like the reference
+    height = unit(0.2, "cm"),
+    text_family = "sans"
+  ) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white")
   )
-
+ 
 
 
 
@@ -108,37 +124,70 @@ anoph_min[which(anoph_min < 0)] <- 0
 
 # Funestus
 df_fun <- calculate_prop_by_variable(
-  cameroon_data, "fun_pw_district", "ONNV_pos", anoph_max, anoph_min
+  data = onnv_results$data_filtered, 
+  var_col = "fun_pw_district", 
+  chains_df = chains_df, 
+  infM = preprocessed_data$data$infM, 
+  pathogen_col = "a", 
+  breaks_max = anoph_max, 
+  breaks_min = anoph_min
 )
 df_fun$species <- "Funestus"
 
 # Gambiae
 df_gam <- calculate_prop_by_variable(
-  cameroon_data, "gam_pw_district", "ONNV_pos", anoph_max, anoph_min
+  data = onnv_results$data_filtered, 
+  var_col = "gam_pw_district", 
+  chains_df = chains_df, 
+  infM = preprocessed_data$data$infM, 
+  pathogen_col = "a", 
+  breaks_max = anoph_max, 
+  breaks_min = anoph_min
 )
 df_gam$species <- "Gambiae"
 
 df_anopheles <- rbind(df_fun, df_gam)
 
 
+df_fun <- old_calculate_prop_by_variable(
+  data = onnv_results$data_filtered, 
+  var_col = "fun_pw_district", 
+  positive_col = "ONNV_pos",
+  breaks_max = anoph_max, 
+  breaks_min = anoph_min)
+df_fun$species <- "Funestus"
+
+# Gambiae
+df_gam <- old_calculate_prop_by_variable(
+  data = onnv_results$data_filtered, 
+  var_col = "gam_pw_district", 
+  positive_col = "ONNV_pos",
+  breaks_max = anoph_max, 
+  breaks_min = anoph_min)
+df_gam$species <- "Gambiae"
+
+df_anopheles <- rbind(df_fun, df_gam)
+
 # Funestus plot
 prop_fun_prev <- ggplot(df_fun, aes(x = x, y = y)) +
-  geom_point(color = "purple", size = 2) +
-  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "purple") +
+  geom_point(color = "#42026a", size = 2) +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#42026a") +
   scale_x_continuous(limits = c(0, 1)) +
-  scale_y_continuous(limits = c(0, 0.5)) +
+  scale_y_continuous(limits = c(0, 0.4)) +
   labs(x = "Proportion Anopheles funestus", y = "Proportion ONNV positive") +
   theme_classic()
 
 # Gambiae plot
 prop_gam_prev <- ggplot(df_gam, aes(x = x, y = y)) +
-  geom_point(color = "orange", size = 2) +
-  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "orange") +
+  geom_point(color = "#00a2ff", size = 2) +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#00a2ff") +
   scale_x_continuous(limits = c(0, 1)) +
-  scale_y_continuous(limits = c(0, 0.5)) +
+  scale_y_continuous(limits = c(0, 0.4)) +
   labs(x = "Proportion Anopheles gambiae", y = "Proportion ONNV positive") +
   theme_classic()
 
 # Combined plot
-(prop_fun_prev + prop_gam_prev)
+combined <- prop_fun_prev + prop_gam_prev
 
+
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Figure4.png", plot = combined, width = 10, height = 4)

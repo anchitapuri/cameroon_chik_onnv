@@ -307,7 +307,7 @@ plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
     )+
       # Lines
       geom_line(data = dpqN,
-                aes(titer, med, colour = "True negative"),
+                aes(titer, med, colour = "Negative"),
                 linewidth = 1) +
       geom_line(data = dpqNcross,
                 aes(titer, med, colour = "Cross-reactive negative"),
@@ -316,7 +316,7 @@ plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
                 aes(titer, med, colour = "Positive"),
                 linewidth = 1) +
 
-      # Ribbons
+      # Ribbons 
       geom_ribbon(data = dpqN,
                   aes(x = titer, y = med,
                       ymin = ciL, ymax = ciU,
@@ -346,15 +346,15 @@ plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
     scale_colour_manual(
       values = c(
         "True negative" = "#021d37",
-        "Cross-reactive negative" = "#028eb1",
-        "Positive" = "#c7035b"
+        "Cross-reactive negative" = "#035a6f",
+        "Positive" = "#530227"
       )
     ) +
     scale_fill_manual(
       values = c(
         "True negative" = "#043565",
-        "Cross-reactive negative" = "#05b2dc",
-        "Positive" = "#f46ca9"
+        "Cross-reactive negative" = "#028eb1",
+        "Positive" = "#c7035b"
       )
     )+ guides(fill = "none")
   
@@ -459,8 +459,8 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
   # Create plotting data - 4 rows total
   plot_data <- tibble(
     antigen = c("ONNV_VLP_log", "ONNV_VLP_log", "CHIKV_sE2_log", "CHIKV_sE2_log"),
-    response_type = c("Homologous", "Cross-reactive (φ × μ1)", 
-                      "Homologous", "Cross-reactive (φ × μ1)"),
+    response_type = c("Homologous", "Cross-reactive \n(φ × μ1)", 
+                      "Homologous", "Cross-reactive \n(φ × μ1)"),
     increase = c(
       onnv_mu1_med,                  # ONNV homologous
       chik_to_onnv_increase_med,     # CHIK → ONNV cross-reactive
@@ -482,7 +482,7 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
     infecting_virus = c("ONNV", "CHIK", "CHIK", "ONNV")
   ) %>%
     mutate(
-      response_type = factor(response_type, levels = c("Homologous", "Cross-reactive (φ × μ1)")),
+      response_type = factor(response_type, levels = c("Homologous", "Cross-reactive \n(φ × μ1)")),
       antigen_label = ifelse(antigen == "ONNV_VLP_log", "ONNV", "CHIK")
     )
   
@@ -494,22 +494,22 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
     facet_wrap(~ antigen_label) +
     scale_fill_manual(
       values = c("ONNV" = "#c7035b", "CHIK" = "#028eb1"),
-      name = "Infecting virus"
+      name = "Infecting pathogen"
     )  +
     labs(
       x = "",
-      y = "Antibody titer increase (log units)",
-      title = "Homologous vs Cross-reactive Antibody Responses"
+      y = "Antibody titer increase (log units)"
     ) +
     theme_bw() +
     theme(
       aspect.ratio = 1,
+      panel.grid = element_blank(),
       plot.title = element_text(hjust = 0.5, size = 20),
-      axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
+      axis.text.x = element_text(size = 20, hjust = 0.5),
       axis.text.y = element_text(size = 20),
       axis.title = element_text(size = 20),
       strip.text = element_text(size = 20),
-      strip.background = element_rect(fill = "gray90"),
+      strip.background = element_rect(fill = "#ffffff"),
       legend.position = "right",
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20),
@@ -547,9 +547,7 @@ plot_seroprevalence <- function(chains_df) {
     scale_y_continuous(limits = c(0, NA), labels = scales::percent) +
     labs(
       x = "",
-      y = "Seroprevalence",
-      title = "Overall Seroprevalence Estimates"
-    ) +
+      y = "Seroprevalence") +
     theme_bw() +
     theme(
       plot.title = element_text(hjust = 0.5, size = 20),
@@ -557,10 +555,11 @@ plot_seroprevalence <- function(chains_df) {
       axis.text.y = element_text(size = 24),
       axis.title = element_text(size = 20),
       strip.text = element_text(size = 20),
-      strip.background = element_rect(fill = "gray90"),
+      strip.background = element_rect(fill = "#ffffff"),
       legend.position = "right",
       panel.grid.major.x = element_blank(),
-      aspect.ratio = 0.5
+      aspect.ratio = 0.5,
+      panel.grid.major.x = element_blank()
     )
   
   # Print the values

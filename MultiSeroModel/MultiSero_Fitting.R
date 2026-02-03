@@ -101,6 +101,15 @@ print(p1 + p2 + p3 + p4)
 distfits <- plot_fits(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens, show_crossreactive_for = seq_along(preprocessed_data$pathogens))
 distfits$fitPN
 
+ggsave(
+  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2a.png',
+  plot = distfits$fitPN,
+  width = 14,
+  height = 10,
+  units = "in",
+  dpi = 300,
+  bg = "white"
+)
 
 # extract phi and mu1 posterior distributions
 phi <- extract_phi(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
@@ -110,12 +119,27 @@ mu <- extract_mu(chains_df, preprocessed_data$data, pathogens=preprocessed_data$
 # plot titre increease due to infection / CR for each pathogen
 p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
 print(p_CR)
+ggsave(
+  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2b.png',
+  plot = p_CR,
+  width = 12,
+  height = 10,
+  units = "in",
+  dpi = 300
+)
 
 
 # plot proportion pos 
 p_sero <- plot_seroprevalence(chains_df)
 print(p_sero)
-
+ggsave(
+  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2c.png',
+  plot = p_sero,
+  width = 12,
+  height = 10,
+  units = "in",
+  dpi = 300
+)
 
 
 # --- Cluster assignment based on max probability - For INLA analysis 
