@@ -101,9 +101,7 @@ col_palette <- sequential_hcl(n = 7, h = c(36, 200), c = c(60, NA, 0), l = c(25,
 
 
 # --- Function to extract and plot FOI ---
-extract_and_plot_foi <- function(model, coop, pathogen_name = "ONNV",
-    colors = col_palette
-) { 
+extract_and_plot_foi <- function(model, coop, pathogen_name = "ONNV") { 
   # Get prediction indices
   index_pred <- inla.stack.index(model$stk.full, tag = "pred")$data
   
@@ -132,8 +130,8 @@ extract_and_plot_foi <- function(model, coop, pathogen_name = "ONNV",
   p <- ggplot() +
     geom_sf(
       data = foi_sf, aes(color = foi), size = 1.7, alpha = 1) +
-    scale_color_gradientn(
-      colors = col_palette,
+    scale_color_viridis_c(
+      option = 'mako',
       name = "FOI (λ)",
       limits = c(0, max(foi_sf$foi))) +
     theme_minimal() + 
@@ -371,7 +369,6 @@ plot_predicted_annual_infections <- function(foi_result, model, age_groups, age_
             size = 1.7, alpha = 1, shape = 15) +
     scale_color_viridis_c(
       option = "mako",
-      direction = -1,
       transform = "log10",
       name = "Annual\nInfections",
       labels = scales::comma_format()
