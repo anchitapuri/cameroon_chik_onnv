@@ -26,6 +26,7 @@ library(exactextractr)
 library(rworldxtra)
 library(centr)
 library(terra)
+library(colorspace)
 
 # --- Source functions
 source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
@@ -85,16 +86,14 @@ onnv_results_pop_grid <- run_inla(
 saveRDS(onnv_results_pop_grid, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/ONNV_INLAResults.rds')
 
 
-# --- Index of prediction and estimation stacks 
-index_pred_onnv <- inla.stack.index(onnv_results_pop_grid$stk.full, "pred")$data
-length(index_pred_onnv)
-index_est_onnv <- inla.stack.index(onnv_results_pop_grid$stk.full, "est")$data
-length(index_est_onnv)
-
-
+col_palette <- c("#d9ed92", "#b5e48c", "#99d98c", "#76c893", 
+                 "#52b69a", "#34a0a4", "#168aad", "#1a759f", 
+                 "#1e6091", "#184e77")
+scales::show_col(col_palette)
 
 # --- Extract and plot FOI
-foi_onnv <- extract_and_plot_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
+foi_onnv <- extract_and_plot_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV",
+                                colors = col_palette)
 # overall FOI
 est_cameroonwide_foi <-exp(onnv_results_pop_grid$output$summary.fixed$mean)
 
@@ -145,6 +144,10 @@ infections_onnv <- plot_predicted_annual_infections(
 infections_onnv$total_infections  # Total infections across all locations
 infections_onnv$susceptible_people  # Breakdown by age group
 infections_onnv$seropositive_people  # Min and max by location
+
+# combined plots 
+foi_onnv$plot + sero_onnv$plot + infections_onnv$plot 
+
 
 
 

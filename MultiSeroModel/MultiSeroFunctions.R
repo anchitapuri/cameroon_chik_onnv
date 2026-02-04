@@ -307,7 +307,7 @@ plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
     )+
       # Lines
       geom_line(data = dpqN,
-                aes(titer, med, colour = "Negative"),
+                aes(titer, med, colour = "True negative"),
                 linewidth = 1) +
       geom_line(data = dpqNcross,
                 aes(titer, med, colour = "Cross-reactive negative"),
@@ -356,7 +356,7 @@ plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
         "Cross-reactive negative" = "#028eb1",
         "Positive" = "#c7035b"
       )
-    )+ guides(fill = "none")
+    )+ guides(fill = "none",  colour = "none")
   
   # return plots
   return(list(fit=fitD,fitPN=fitDPN)) 
@@ -505,15 +505,16 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
       aspect.ratio = 1,
       panel.grid = element_blank(),
       plot.title = element_text(hjust = 0.5, size = 20),
-      axis.text.x = element_text(size = 20, hjust = 0.5),
+      axis.text.x = element_text(size = 20, angle = 20, hjust = 0.8),
       axis.text.y = element_text(size = 20),
       axis.title = element_text(size = 20),
       strip.text = element_text(size = 20),
       strip.background = element_rect(fill = "#ffffff"),
-      legend.position = "right",
+      legend.position = "bottom",
+      legend.box.margin = margin(t = -20, r = 0, b = 0, l = 0),
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20),
-      panel.grid.major.x = element_blank()
+      panel.grid.major.x = element_blank(),
     )
   
   return(p)
@@ -551,6 +552,7 @@ plot_seroprevalence <- function(chains_df) {
     theme_bw() +
     theme(
       plot.title = element_text(hjust = 0.5, size = 20),
+      panel.grid = element_blank(),
       axis.text.x = element_text(size = 24),
       axis.text.y = element_text(size = 24),
       axis.title = element_text(size = 20),
@@ -558,9 +560,8 @@ plot_seroprevalence <- function(chains_df) {
       strip.background = element_rect(fill = "#ffffff"),
       legend.position = "right",
       panel.grid.major.x = element_blank(),
-      aspect.ratio = 0.5,
-      panel.grid.major.x = element_blank()
-    )
+      aspect.ratio = 0.6, 
+      plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"))
   
   # Print the values
   cat("\nSeroprevalence estimates:\n")

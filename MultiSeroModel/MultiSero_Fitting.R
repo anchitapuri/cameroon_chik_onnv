@@ -99,7 +99,7 @@ print(p1 + p2 + p3 + p4)
 
 # Plot fits (neg component, neg-CR component, pos component)
 distfits <- plot_fits(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens, show_crossreactive_for = seq_along(preprocessed_data$pathogens))
-distfits$fitPN
+distfits$fitPN 
 
 ggsave(
   filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2a.png',
@@ -132,6 +132,7 @@ ggsave(
 # plot proportion pos 
 p_sero <- plot_seroprevalence(chains_df)
 print(p_sero)
+
 ggsave(
   filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2c.png',
   plot = p_sero,
@@ -140,6 +141,22 @@ ggsave(
   units = "in",
   dpi = 300
 )
+
+
+# Figures combined 
+# Reduce spacing between all plots
+fig2 <- distfits$fitPN / (p_CR | p_sero) + plot_layout(heights = c(2, 2)) 
+print(fig2)
+ggsave(
+  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2.png',
+  plot = fig2,
+  width = 15,
+  height = 10,
+  units = "in",
+  dpi = 300
+)
+
+
 
 
 # --- Cluster assignment based on max probability - For INLA analysis 
@@ -180,6 +197,9 @@ ggplot(meta_data_alpha,
     title = "Hard-assigned clusters"
   ) +
   theme_minimal()
+
+
+
 
 # save file with labels 
 write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv", row.names = FALSE)

@@ -20,16 +20,25 @@ preprocessed_data <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Final
 # --- Plot age seroprevalence model fits
 # prepare data for stan
 
-quartz(width = 14, height = 14)
-plot_age_seroprevalence_model_fits(
+age_prev_model_fits <- plot_age_seroprevalence_model_fits(
   year_intro = onnv_results$year,
   result = onnv_results, 
   data = model_data,
   chains_df = chains_df,
   infM = preprocessed_data$data$infM,
-  pathogen_col = "a"
+  pathogen_col = "a" # a == ONNV 
 )
+print(age_prev_model_fits)
+class(age_prev_model_fits)
+print(age_prev_model_fits[[1]])
 
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig3.png", 
+       plot = age_prev_model_fits[[1]],    # swap for your actual plot object name
+       width = 18, 
+       height = 12, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
 
 
 # --- Plot CHIK infection locations 
@@ -59,8 +68,8 @@ cameroon_sf <- ne_countries(
   scale = "medium",
   returnclass = "sf"
 )
-
-ggplot() +
+  
+chik_infections <-ggplot() +
   geom_sf(
   data = cameroon_sf,
   fill = NA,          # no fill
@@ -70,48 +79,61 @@ ggplot() +
   geom_sf(
     data = st_centroid(chik_pos_sf),
     aes(colour = aeg_pw_district),
-    size = 3,
-    alpha = 0.8
+    size = 8,
+    alpha = 0.85
   ) +
   scale_colour_gradient(
-    low = "#0157b2",
-    high = "#8b3351",
+   low = "#0298fc",
+    high = "#d70048",
     name = "Aegypti",
     guide = guide_colorbar(
-      barheight = unit(2, "cm"),
-      barwidth = unit(0.4, "cm"),
+      direction = "horizontal",  
+      barheight = unit(0.2, "cm"),      # thin (horizontal)
+      barwidth = unit(6.5, "cm"),       # wide (horizontal)
       ticks = TRUE,
-      ticks.length = unit(0.15, "cm")
-    )
-  ) +
+      title.position = "bottom",
+      label.position = "bottom",
+      ticks.length = unit(0.1, "cm"),
+      title.vjust = 0.5)
+    ) +
   geom_sf(
     data = cities_sf,
     aes(fill = city),
-    shape = 21,
-    colour = "black",
-    size = 4,
+    shape = 24,
+    colour = "#f1f3f4",
+    size = 8,
     stroke = 0.6
   ) +
   scale_fill_manual(
-    values = c("Yaoundé" = "lightblue", "Douala" = "darkblue"),
-    name = "Cities"
+    values = c("Yaoundé" = "#013018", "Douala" = "#013018"),
+    name = ""
   ) +
   annotation_scale(
-    location = "bl",        # bottom-left
-    width_unit = "km",
     bar_cols = c("black", "white"),  # alternating black/white like the reference
     height = unit(0.2, "cm"),
-    text_family = "sans"
+    text_family = "sans", 
+    text_cex = 1.5
   ) +
   theme(
+    legend.position = c(0.3, 0.6), 
     panel.grid = element_blank(),
     axis.text = element_blank(),
     axis.ticks = element_blank(),
+    legend.text = element_text(size = 20),        
+    legend.title = element_text(size = 20),   
     panel.background = element_rect(fill = "white"),
-    plot.background = element_rect(fill = "white")
+    plot.background = element_rect(fill = "white"),
   )
- 
 
+print(chik_infections)
+
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4a.png", 
+       plot = chik_infections,    # swap for your actual plot object name
+       width = 18, 
+       height = 12, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
 
 
 

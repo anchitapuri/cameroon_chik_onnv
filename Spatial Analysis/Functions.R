@@ -97,10 +97,13 @@ run_inla <- function(year_intro, data, cam_pop, positive_col) {
   ))
 }
 
+col_palette <- sequential_hcl(n = 7, h = c(36, 200), c = c(60, NA, 0), l = c(25, 95), power = c(0.7, 1.3))
 
 
 # --- Function to extract and plot FOI ---
-extract_and_plot_foi <- function(model, coop, pathogen_name = "ONNV") { 
+extract_and_plot_foi <- function(model, coop, pathogen_name = "ONNV",
+    colors = col_palette
+) { 
   # Get prediction indices
   index_pred <- inla.stack.index(model$stk.full, tag = "pred")$data
   
@@ -129,20 +132,24 @@ extract_and_plot_foi <- function(model, coop, pathogen_name = "ONNV") {
   p <- ggplot() +
     geom_sf(
       data = foi_sf, aes(color = foi), size = 1.7, alpha = 1) +
-    scale_color_viridis(
-      option = "mako",
+    scale_color_gradientn(
+      colors = col_palette,
       name = "FOI (λ)",
       limits = c(0, max(foi_sf$foi))) +
-    labs(
-      title = paste0("Force of Infection (FOI) Predictions - ", pathogen_name),
-      x = "Longitude",
-      y = "Latitude"
-    ) +
     theme_minimal() + 
     theme(
+      panel.grid = element_blank(),
       legend.position = "right",
-      plot.title = element_text(size = 14, face = "bold")
-    )
+      plot.title = element_text(size = 20),
+      axis.text = element_blank(),      # Remove axis text (lat/long labels)
+      axis.ticks = element_blank()) + 
+    annotation_scale(
+    bar_cols = c("black", "white"),  # alternating black/white like the reference
+    height = unit(0.2, "cm"),
+    text_family = "sans", 
+    text_cex = 1.5
+  )
+    
   
   print(p)
   
@@ -219,17 +226,22 @@ plot_predicted_seroprevalence <- function(foi_result, model, age_groups, age_wei
       limits = c(0, max(prev_sf$prev, na.rm = TRUE)),
       labels = scales::percent_format(accuracy = 1)
     ) +
-    labs(
-      title = paste0("Predicted Seroprevalence - ", pathogen_name),
-      x = "Longitude",
-      y = "Latitude"
-    ) +
     theme_minimal() +
     theme(
+      panel.grid = element_blank(),
       legend.position = "right",
-      plot.title = element_text(size = 14, face = "bold"),
-      plot.subtitle = element_text(size = 11)
-    )
+      plot.title = element_text(size = 20),
+      axis.text = element_blank(),      # Remove axis text (lat/long labels)
+      axis.ticks = element_blank()
+      ) +
+    
+    annotation_scale(
+      bar_cols = c("black", "white"),  # alternating black/white like the reference
+      height = unit(0.2, "cm"),
+      text_family = "sans", 
+      text_cex = 1.5
+  )
+    
   
   print(p)
   
@@ -358,26 +370,26 @@ plot_predicted_annual_infections <- function(foi_result, model, age_groups, age_
     geom_sf(data = infections_sf, aes(color = infections), 
             size = 1.7, alpha = 1, shape = 15) +
     scale_color_viridis_c(
-      option = "plasma",
+      option = "mako",
+      direction = -1,
+      transform = "log10",
       name = "Annual\nInfections",
-      trans = "log10",
       labels = scales::comma_format()
-    ) +
-    labs(
-      title = paste0("Predicted Annual Infections - ", pathogen_name),
-      subtitle = paste0("Total: ", scales::comma(round(total_annual_infections)), 
-                       #" | Seropositive: ", round(cameroon_seropositive_prop * 100, 1), 
-                       "% | Susceptible: ", round(cameroon_susceptible_prop * 100, 1), "%"
-       ),
-      x = "Longitude",
-      y = "Latitude"
     ) +
     theme_minimal() +
     theme(
+      panel.grid = element_blank(),
       legend.position = "right",
-      plot.title = element_text(size = 14, face = "bold"),
-      plot.subtitle = element_text(size = 11)
-    )
+      plot.title = element_text(size = 20),
+      axis.text = element_blank(),      # Remove axis text (lat/long labels)
+      axis.ticks = element_blank()
+    ) +
+  annotation_scale(
+    bar_cols = c("black", "white"),  # alternating black/white like the reference
+    height = unit(0.2, "cm"),
+    text_family = "sans", 
+    text_cex = 1.5
+  )
   
   print(p)
   
@@ -538,17 +550,6 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
     idx_est, c("mean", "0.025quant", "0.975quant")
   ]
   
-  cat("Fit dimensions:", nrow(fit), "x", ncol(fit), "\n")
-
-  # Basic alignment checks
-  if (!is.data.frame(fit))
-    stop("fit is not a data.frame. Check result$output$summary.fitted.values.")
-  if (nrow(fit) != nrow(data_plot)) {
-    stop(sprintf(
-      "Row mismatch. fit=%d, data_plot=%d. Build data_plot in the exact order used to make the stack.",
-      nrow(fit), nrow(data_plot)
-    ))
-  }
   
   # Attach INLA predicted probabilities to each individual
   data_plot$predicted  <- fit$mean
@@ -619,45 +620,55 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
     geom_point(
       data = obs,
       aes(x = age_group, y = obs_mean, color = "Observed"),
-      size = 2, 
-      color = "#0d1b2a"
+      size = 5, 
+      position = position_nudge(x = -0.1)
     ) +
     geom_errorbar(
       data = obs,
-      aes(x = age_group, ymin = obs_lower, ymax = obs_upper),
+      aes(x = age_group, ymin = obs_lower, ymax = obs_upper, color = "Observed"),
       width = 0.15, 
-      color = '#0d1b2a'
+      position = position_nudge(x = -0.1)
     ) +
     # predicted (INLA model fits)
     geom_point(
       data = pred,
-       aes(x = age_group, y = predicted, color = "Estimated"),
-      color = "#0a9396",
-      size = 2
+      aes(x = age_group, y = predicted, color = "Estimated"),
+      size = 5,
+      position = position_nudge(x = 0.1)
+
     ) +
     geom_errorbar(
       data = pred,
-      aes(x = age_group, ymin = pred_lower, ymax = pred_upper),
-      color = "#0a9396",
-      width = 0.15
+      aes(x = age_group, ymin = pred_lower, ymax = pred_upper, color = "Estimated"),
+      width = 0.15,
+      position = position_nudge(x = 0.1)
     ) +
+    scale_color_manual(
+        name = "",
+        values = c("Observed" = "#04989a", "Estimated" = "#c93a88")
+      ) +
     facet_wrap(~ year_of_survey, ncol = 5) +
     labs(
       x = "Age group",
-      y = "Proportion seropositive",
-      title = "Observed vs fitted seroprevalence by age group",
-      subtitle = paste0(
-        "Pathogen column: ", pathogen_col,
-        " | Year of introduction: ", year_intro
-      )
-    ) +
-    theme_bw() +
+      y = "Proportion seropositive") +
     theme(
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      plot.title = element_text(hjust = 0.5),
-      aspect.ratio = 1
-    )
-  
+      panel.grid = element_blank(),
+      panel.background = element_rect(fill = "white"),
+      axis.line = element_line(color = "black", linewidth = 0.7),
+      axis.ticks.x = element_line(color = "black", size = 0.5),
+      axis.ticks.y = element_line(color = "black", size = 0.5),
+      legend.position.inside = c(0.95, 0.5),
+      axis.text = element_text(size = 20),
+      axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
+      axis.title = element_text(size = 24),
+      aspect.ratio = 1.2,
+      legend.text = element_text(size = 24),
+      legend.title = element_text(size = 20),
+      strip.text = element_text(size = 20),
+      strip.background = element_rect(fill = "#ffffff"))
+
+
+
   print(p)
   invisible(list(plot = p, obs = obs, pred = pred, prevalence_draws = prevalence_draws))
 }

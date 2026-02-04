@@ -670,15 +670,14 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1c.png",
 
 
 
-combined <- (fig1a_with_inset | (fig1b / fig1c)) + plot_layout(widths = c(2, 1))
-print(combined)
+fig1 <- (fig1a_with_inset | (fig1b / fig1c)) + plot_layout(widths = c(2, 1))
+print(fig1)
 
 
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1.png", 
-       plot = combined,    # swap for your actual plot object name
+       plot = fig1,    # swap for your actual plot object name
        width = 18, 
        height = 12, 
        units = "in", 
        dpi = 300,
        bg = "white")
- 
