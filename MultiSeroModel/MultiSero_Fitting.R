@@ -115,6 +115,7 @@ ggsave(
 phi <- extract_phi(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
 mu <- extract_mu(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
 
+phi
 
 # plot titre increease due to infection / CR for each pathogen
 p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
@@ -132,6 +133,8 @@ ggsave(
 # plot proportion pos 
 p_sero <- plot_seroprevalence(chains_df)
 print(p_sero)
+
+
 
 ggsave(
   filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2c.png',

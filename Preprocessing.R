@@ -23,6 +23,8 @@ library(raster)
 # read data files with labels 
 meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/base_complete_MFI_meta.csv')
 nrow(meta_data)
+colnames(meta_data)
+length(unique(tolower(meta_data$DistrictOfresidence)))
 
 
 # Load shapefile
@@ -392,6 +394,7 @@ ggplot() +
   labs(title = "Cameroon: Population-Weighted Centroids",
        x = "Longitude", y = "Latitude")
 
+sum(is.na(sf_meta_data_with_coords_pw$CHIKV_sE2))
 
 # Drop Nas + remove duplicates
 sf_meta_data_with_coords_pw <- sf_meta_data_with_coords_pw %>%
@@ -402,7 +405,7 @@ sf_meta_data_with_coords_pw <- sf_meta_data_with_coords_pw[!duplicated(sf_meta_d
 
 # Add year of survey column
 sf_meta_data_with_coords_pw$year_of_survey <- as.numeric(substr(sf_meta_data_with_coords_pw$Sample, 1, 4))
-
+unique(sf_meta_data_with_coords_pw$year_of_survey)
 nrow(sf_meta_data_with_coords_pw)
 
 # --- Save file with pop weighted coords and mosquito proportions for spatial analysis 
@@ -413,16 +416,18 @@ preprocessed_meta_data_without_coords <- sf_meta_data_with_coords_pw %>%
 write.csv(preprocessed_meta_data_without_coords, 
           '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv', 
           row.names = FALSE)
-
+nrow(preprocessed_meta_data_without_coords)
 
 sf_meta_data_with_coords_pw <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
-
-
+nrow(sf_meta_data_with_coords_pw)
+length(unique(sf_meta_data_with_coords_pw$geometry))
+ 
 # --- Figure 1 ----
 location_counts <- sf_meta_data_with_coords_pw %>%
   st_drop_geometry() %>%  # Remove spatial features
   group_by(district_lower, Longitude, Latitude) %>%
   summarise(n_samples = n(), .groups = 'drop')
+
 
 # Convert raster to data frame for ggplot
 cam_pop_df <- as.data.frame(cam_pop_den, xy = TRUE)
