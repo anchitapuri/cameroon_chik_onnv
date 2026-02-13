@@ -21,6 +21,7 @@ library(tidyr)
 library(here)
 library(cmdstanr)
 library(patchwork)
+library(mixR)
 
 source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/MultiSeroModel/MultiSeroFunctions.R'))
 
@@ -113,13 +114,24 @@ ggsave(
 
 # extract phi and mu1 posterior distributions
 phi <- extract_phi(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
+print(phi)
 mu <- extract_mu(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
+print(mu)
+sero <- extract_sero(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
 
-phi
+
+# MAYV homologous vs cross reactive increase 
+# --- Extract cross reactivity - MAYV vs ONNV and CHIK 
+CR_mayv <- titer_increases_comparison_mayv(phi$phi, mu$mus1)
+CR_mayv
+
+phi$phi
 
 # plot titre increease due to infection / CR for each pathogen
 p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
 print(p_CR)
+
+
 ggsave(
   filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2b.png',
   plot = p_CR,
@@ -134,7 +146,7 @@ ggsave(
 p_sero <- plot_seroprevalence(chains_df)
 print(p_sero)
 
-
+p_sero
 
 ggsave(
   filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2c.png',
@@ -202,7 +214,37 @@ ggplot(meta_data_alpha,
   theme_minimal()
 
 
-
-
 # save file with labels 
 write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv", row.names = FALSE)
+
+
+
+
+# 2D Mixture model fits (for comparison to multisero model estimates)# 2D mixture model fits 
+
+
+# ---- Fit CHIK  - using 50% for comp2
+fmm_normal_chik <- mixfit(meta_data_alpha$CHIKV_sE2_log, ncomp = 2, family="normal")
+plot(fmm_normal_chik)
+#define threshold to get chik+ve and chik-ve
+pred.dat_normal_chik <-cbind(fmm_normal_chik$data, fmm_normal_chik$comp.prob)
+chik_positive_normal <- ifelse(pred.dat_normal_chik[, 3] > 0.5, "1", "0")
+table(chik_positive_normal)
+
+
+# ---- Fit ONNV  - using 50% for comp2
+fmm_normal_onnv <- mixfit(meta_data_alpha$ONNV_VLP_log, ncomp = 2, family="normal")
+plot(fmm_normal_onnv)
+#define threshold to get onnv+ve and onnv-ve
+pred.dat_normal_onnv <- cbind(fmm_normal_onnv$data, fmm_normal_onnv$comp.prob)
+onnv_positive_normal <- ifelse(pred.dat_normal_onnv[, 3] > 0.5, "1", "0")
+table(onnv_positive_normal)
+
+
+# ---- Fit MAYV  - using 50% for comp2
+fmm_normal_mayv <- mixfit(meta_data_alpha$MAYV_E2_log, ncomp = 2, family="normal")
+plot(fmm_normal_mayv)
+#define threshold to get chik+ve and chik-ve
+pred.dat_normal_mayv<-cbind(fmm_normal_mayv$data, fmm_normal_mayv$comp.prob)
+mayv_positive_normal <- ifelse(pred.dat_normal_mayv[, 3] > 0.5, "1", "0")
+table(mayv_positive_normal)

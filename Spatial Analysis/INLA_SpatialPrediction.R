@@ -27,13 +27,14 @@ library(rworldxtra)
 library(centr)
 library(terra)
 library(colorspace)
+library(ggspatial)
 
 # --- Source functions
 source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
 
 # Population and mosquito rasts
-anopheles_funestus <- rast('2010_Anopheles_funestus_CMR.tiff')
-anopheles_gambiae <- rast('2010_Anopheles_gambiae_ss_CMR.tiff')
+anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_funestus_CMR.tiff')
+anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_gambiae_ss_CMR.tiff')
 cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
 sum(values(cam_pop), na.rm = TRUE)
 
@@ -87,20 +88,56 @@ onnv_results_pop_grid <- run_inla(
   cam_pop = cam_pop,
   positive_col = "ONNV_pos")
 
-                         
 # --- Save best model results 
 saveRDS(onnv_results_pop_grid, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/ONNV_INLAResults.rds')
 
 
-nrow(onnv_results_pop_grid$cooe)
+# --- ESTIMATED LOCATION CALCULATIONS BY REGION ----
+index_est <- inla.stack.index(onnv_results_pop_grid$stk.full, tag = "est")$data
+# Extract the intercept
+eta_est <- onnv_results_pop_grid$output$summary.linear.predictor[index_est, "mean"]
+lambda_est <- exp(eta_est)
+range(lambda_est)
 
+# Add lamba est to data (to then group by region)
+est_data <- onnv_results_pop_grid$data_filtered
+# add region
+est_data$region <- sapply(strsplit(est_data$IdNumber, "-"), `[`, 2)
+# assuming ZST is mis-spelled and is EST
+est_data <- est_data %>%
+  mutate(region = recode(region, "ZST" = "EST"))
+unique(est_data$region)
+
+# add lambda at estimated locations
+est_data$lambda_est <- lambda_est
+
+# lambda by region (weighted by population)
+region_lambda <- est_data %>%
+  group_by(region) %>%
+  summarise(
+    total_population = sum(Total_Population, na.rm = TRUE),
+    lambda_weighted = sum(lambda_est * Total_Population, na.rm = TRUE) /
+                      sum(Total_Population, na.rm = TRUE),
+    .groups = "drop"
+  )
+region_lambda
+
+
+
+
+# --- SPATIAL PREDICTIONS ---- 
 
 # --- Extract and plot FOI
 foi_onnv <- extract_and_plot_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
+
 # overall FOI
-est_cameroonwide_foi <-exp(onnv_results_pop_grid$output$summary.fixed$mean)
-print(est_cameroonwide_foi)
-range(foi_onnv$foi_sf$foi, na.rm = TRUE)
+foi_summary <- onnv_results_pop_grid$output$summary.fixed
+
+est_cameroonwide_foi <- list(
+  mean = exp(foi_summary$mean),
+  ciL  = exp(foi_summary$`0.025quant`),
+  ciU  = exp(foi_summary$`0.975quant`)
+)
 
 # --- Prob of seropositive proportion 
 cameroon_age_2025$total

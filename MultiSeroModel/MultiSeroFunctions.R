@@ -421,6 +421,15 @@ extract_phi <- function(chains, data, pathogens){
   
 }
 
+extract_sero <- function(chains, data, pathogens){
+  
+  sero <- data.frame(pathogen=pathogens, med=NA, ciL=NA, ciU=NA)
+  
+  for(p in 1:data$nP) sero[p,2:4] <- quantile(chains[,paste('seroAll[', paste(p,']', sep=''), sep='')], c(0.5,0.025,0.975))
+  sero <- sero[!sero$med==0, ]
+  
+  return(sero)
+}
 
 
 # --- Plot cross reactivity - ONNV vs CHIK
@@ -517,8 +526,64 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
       panel.grid.major.x = element_blank(),
     )
   
-  return(p)
+  return(list(p = p, plot_data = plot_data))
 }
+
+titer_increases_comparison_mayv <- function(phi_df, mu_mus1) {
+  # ONNV homologous
+  onnv_mu1_med <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(med)
+  onnv_mu1_ciL <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(ciL)
+  onnv_mu1_ciU <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(ciU)
+  
+  # CHIK homologous
+  chik_mu1_med <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(med)
+  chik_mu1_ciL <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(ciL)
+  chik_mu1_ciU <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(ciU)
+
+  # MAYV → ONNV cross-reactive
+  mayv_to_onnv_phi_med <- phi_df %>% 
+    filter(pos == "ONNV_VLP_log", neg == "MAYV_E2_log") %>% 
+    pull(med)
+  
+  mayv_to_onnv_phi_ciL <- phi_df %>% 
+    filter(pos == "ONNV_VLP_log", neg == "MAYV_E2_log") %>% 
+    pull(ciL)
+  
+  mayv_to_onnv_phi_ciU <- phi_df %>% 
+    filter(pos == "ONNV_VLP_log", neg == "MAYV_E2_log") %>% 
+    pull(ciU)
+  
+  # MAYV → CHIK cross-reactive
+  mayv_to_chik_phi_med <- phi_df %>% 
+    filter(pos == "CHIKV_sE2_log", neg == "MAYV_E2_log") %>% 
+    pull(med)
+  
+  mayv_to_chik_phi_ciL <- phi_df %>% 
+    filter(pos == "CHIKV_sE2_log", neg == "MAYV_E2_log") %>% 
+    pull(ciL)
+  
+  mayv_to_chik_phi_ciU <- phi_df %>% 
+    filter(pos == "CHIKV_sE2_log", neg == "MAYV_E2_log") %>% 
+    pull(ciU)
+
+  # Calculate cross-reactive increases (phi × mu1)
+  onnv_to_may_increase_med <- mayv_to_onnv_phi_med * onnv_mu1_med
+  onnv_to_may_increase_ciL <- mayv_to_onnv_phi_ciL * onnv_mu1_ciL
+  onnv_to_may_increase_ciU <- mayv_to_onnv_phi_ciU * onnv_mu1_ciU
+  
+  chik_to_may_increase_med <- mayv_to_chik_phi_med * chik_mu1_med
+  chik_to_may_increase_ciL <- mayv_to_chik_phi_ciL * chik_mu1_ciL
+  chik_to_may_increase_ciU <- mayv_to_chik_phi_ciU * chik_mu1_ciU
+  
+  
+  return(list(
+    mayv_to_onnv = c(med = onnv_to_may_increase_med, ciL = onnv_to_may_increase_ciL, ciU = onnv_to_may_increase_ciU),
+    mayv_to_chik = c(med = chik_to_may_increase_med, ciL = chik_to_may_increase_ciL, ciU = chik_to_may_increase_ciU)
+  ))
+}
+
+
+
 
 # --- Plot proportion positive 
 plot_seroprevalence <- function(chains_df) {

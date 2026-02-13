@@ -26,6 +26,9 @@ nrow(meta_data)
 colnames(meta_data)
 length(unique(tolower(meta_data$DistrictOfresidence)))
 
+sum(is.na(meta_data$CHIKV_sE2))
+sum(is.na(meta_data$ONNV_VLP))
+sum(is.na(meta_data$MAYV_E2))
 
 # Load shapefile
 cam_shapefile_districts <- read_sf('/Users/ap2488/Desktop/Cameroon_Analysis_2025/S4_Cameroon_health_districts_files/Caedistricts179_region.shp')
@@ -402,6 +405,7 @@ sf_meta_data_with_coords_pw <- sf_meta_data_with_coords_pw %>%
 
 sf_meta_data_with_coords_pw <- sf_meta_data_with_coords_pw[!duplicated(sf_meta_data_with_coords_pw$Sample), ]
 
+length(unique(sf_meta_data_with_coords_pw$district_lower))
 
 # Add year of survey column
 sf_meta_data_with_coords_pw$year_of_survey <- as.numeric(substr(sf_meta_data_with_coords_pw$Sample, 1, 4))
@@ -550,6 +554,19 @@ summarise(
   total_M = sum(M),
   total_F = sum(F)
 )
+sum(is.na(sf_meta_data_with_coords_pw$Sex))
+sum(sf_meta_data_with_coords_pw$Sex == 9, na.rm = TRUE)
+table(sf_meta_data_with_coords_pw$Sex)
+
+mean(sf_meta_data_with_coords_pw$AgeInYears, na.rm = TRUE)
+
+# sex = NA -> 18
+# sex = 9 -> 2
+# age = NA  -> 4 (of these two are, 3 are female (2) and 1 is male (1)
+
+sum(is.na(sf_meta_data_with_coords_pw$AgeInYears))
+sf_meta_data_with_coords_pw[is.na(sf_meta_data_with_coords_pw$AgeInYears), ]
+
 
 pyramid_data <- sf_meta_data_with_coords_pw %>%
   st_drop_geometry() %>%
@@ -582,9 +599,11 @@ pyramid_data <- sf_meta_data_with_coords_pw %>%
     count = ifelse(Sex_label == "Female", -count, count)
   )
 
+
 sample_totals <- pyramid_data %>%
   group_by(Sex_label) %>%
   summarise(total_samples = sum(abs(count)), .groups = 'drop')
+
 
 # Calculate expected samples based on census proportions
 # You'll need to combine your census data into 10-year age groups too
@@ -686,3 +705,9 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1.png",
        units = "in", 
        dpi = 300,
        bg = "white")
+
+
+
+
+
+
