@@ -8,11 +8,6 @@ run_inla <- function(year_intro, data, cam_pop, positive_col) {
   
   data <- data[!is.na(data$years_of_exposure) & data$years_of_exposure > 0, ]
   
-  # Check if we have enough data
-  if (nrow(data) < 50) {
-    warning(paste0("Year ", year_intro, " has too few valid observations (", nrow(data), "). Skipping."))
-    return(NULL)
-  }
   
   data_points <- data %>%
     st_drop_geometry() %>%
@@ -54,7 +49,7 @@ run_inla <- function(year_intro, data, cam_pop, positive_col) {
   A <- inla.spde.make.A(mesh = mesh, loc = cooe)
   Ap <- inla.spde.make.A(mesh = mesh, loc = as.matrix(coop))
   
-  # Estimation stack - USE THE INPUT PARAMETER
+  # Estimation stack 
   stk.e <- inla.stack(
     data = list(y = data_points[[positive_col]]),  
     A = list(1, A),
@@ -97,7 +92,6 @@ run_inla <- function(year_intro, data, cam_pop, positive_col) {
   ))
 }
 
-col_palette <- sequential_hcl(n = 7, h = c(36, 200), c = c(60, NA, 0), l = c(25, 95), power = c(0.7, 1.3))
 
 
 # --- Function to extract and plot FOI ---
@@ -160,7 +154,7 @@ extract_and_plot_foi <- function(model, coop, pathogen_name = "ONNV") {
 }
 
 
-# --- CORRECT Function to extract and plot seroprevalence ---
+# ---  Function to extract and plot seroprevalence ---
 plot_predicted_seroprevalence <- function(foi_result, model, age_groups, age_weights,
                                           crs = 32633, pathogen_name = "ONNV") {
   
@@ -671,7 +665,31 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
 }
 
 # --- Propotion by mosquito distribution + log population 
-calculate_prop_by_variable <- function(data, var_col, chains_df, infM, pathogen_col,
+calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, breaks_min) {
+  var_mid <- rep(NaN, length(breaks_max))
+  prop_pos <- matrix(NaN, length(breaks_max), 3)
+  
+  for (i in 1:length(breaks_max)) {
+    tmp <- which(data[[var_col]] < breaks_max[i] & data[[var_col]] >= breaks_min[i])
+    if (length(tmp) > 5) {
+      prop_pos[i, 1] <- mean(data[[positive_col]][tmp], na.rm = TRUE)
+      a <- prop.test(sum(data[[positive_col]][tmp]), length(tmp))
+      prop_pos[i, 2:3] <- a$conf.int
+      var_mid[i] <- mean(data[[var_col]][tmp], na.rm = TRUE)
+    }
+  }
+  
+  data.frame(
+    x = var_mid,
+    y = prop_pos[, 1],
+    ymin = prop_pos[, 2],
+    ymax = prop_pos[, 3]
+  )
+}
+
+
+# --- prop positive using multisero model probabilites 
+calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, infM, pathogen_col,
                                        breaks_max, breaks_min) {
 
   # --- Identify which mixture components are "positive" for this pathogen
@@ -681,8 +699,8 @@ calculate_prop_by_variable <- function(data, var_col, chains_df, infM, pathogen_
   data_plot <- data %>%
     mutate(original_row = row_number()) %>%
     filter(!is.na(.data[[var_col]]))
-
-  kept_indices <- data_plot$original_row
+  kept_indices <- data_plot$original_row 
+  #kept_indices <- data_plot$model_row_id
 
   # --- Sum posterior probabilities across positive components for every draw
   prob_cols_list <- lapply(positive_components, function(comp) {
@@ -721,41 +739,21 @@ calculate_prop_by_variable <- function(data, var_col, chains_df, infM, pathogen_
   # --- Summarise across draws: median + 95 % credible interval
   obs <- prevalence_draws %>%
     group_by(bin, var_mid, n) %>%
-    summarise(
+    dplyr::summarise(
       y    = median(prevalence),
       ymin = quantile(prevalence, 0.025),
       ymax = quantile(prevalence, 0.975),
       .groups = "drop"
     ) %>%
-    select(x = var_mid, y, ymin, ymax)           # match original output columns
+    dplyr::select(x = var_mid, y, ymin, ymax)           # match original output columns
+ 
 
-  obs
+    # posterior mean per individual
+    posterior_mean_probs <- colMeans(probs_all_draws)
+  print(cor(data_plot[[var_col]], posterior_mean_probs))
+
+  return(obs)
 }
 
 
-
-
-
-# --- OLD ---
-old_calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, breaks_min) {
-  var_mid <- rep(NaN, length(breaks_max))
-  prop_pos <- matrix(NaN, length(breaks_max), 3)
-  
-  for (i in 1:length(breaks_max)) {
-    tmp <- which(data[[var_col]] < breaks_max[i] & data[[var_col]] >= breaks_min[i])
-    if (length(tmp) > 5) {
-      prop_pos[i, 1] <- mean(data[[positive_col]][tmp], na.rm = TRUE)
-      a <- prop.test(sum(data[[positive_col]][tmp]), length(tmp))
-      prop_pos[i, 2:3] <- a$conf.int
-      var_mid[i] <- mean(data[[var_col]][tmp], na.rm = TRUE)
-    }
-  }
-  
-  data.frame(
-    x = var_mid,
-    y = prop_pos[, 1],
-    ymin = prop_pos[, 2],
-    ymax = prop_pos[, 3]
-  )
-}
 

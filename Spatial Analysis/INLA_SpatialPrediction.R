@@ -94,13 +94,28 @@ saveRDS(onnv_results_pop_grid, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/Fin
 
 # --- ESTIMATED LOCATION CALCULATIONS BY REGION ----
 index_est <- inla.stack.index(onnv_results_pop_grid$stk.full, tag = "est")$data
+index_pred <- inla.stack.index(onnv_results_pop_grid$stk.full, tag = "pred")$data
+
+
 # Extract the intercept
 eta_est <- onnv_results_pop_grid$output$summary.linear.predictor[index_est, "mean"]
-lambda_est <- exp(eta_est)
+eta_pred <- onnv_results_pop_grid$output$summary.linear.predictor[index_pred, "mean"]
+
+# account for age structure of data
+age_est <- onnv_results_pop_grid$data_filtered$years_of_exposure[index_est]
+log_lambda_est <- eta_est - log(age_est)
+lambda_est <- exp(log_lambda_est)
+
+# dont need to take into account age  
+lambda_pred <- exp(eta_pred)
+
 range(lambda_est)
+range(lambda_pred)
+
 
 # Add lamba est to data (to then group by region)
 est_data <- onnv_results_pop_grid$data_filtered
+
 # add region
 est_data$region <- sapply(strsplit(est_data$IdNumber, "-"), `[`, 2)
 # assuming ZST is mis-spelled and is EST
@@ -111,17 +126,30 @@ unique(est_data$region)
 # add lambda at estimated locations
 est_data$lambda_est <- lambda_est
 
-# lambda by region (weighted by population)
-region_lambda <- est_data %>%
+
+pop_region <- est_data %>%
+  distinct(region, district_lower, Total_Population) %>%
   group_by(region) %>%
   summarise(
-    total_population = sum(Total_Population, na.rm = TRUE),
-    lambda_weighted = sum(lambda_est * Total_Population, na.rm = TRUE) /
-                      sum(Total_Population, na.rm = TRUE),
+    total_population = sum(Total_Population),
     .groups = "drop"
   )
-region_lambda
 
+sum(pop_region$total_population)
+
+lambda_region <- est_data %>%
+  group_by(region) %>%
+  summarise(
+    lambda_weighted = weighted.mean(lambda_est, Total_Population),
+    lambda_unweighted = mean(lambda_est),
+    .groups = "drop"
+  )
+
+region_lambda <- left_join(pop_region, lambda_region, by = "region")
+print(region_lambda)
+sum(region_lambda$total_population)
+max(region_lambda$lambda_weighted)
+min(region_lambda$lambda_weighted)
 
 
 
@@ -129,10 +157,10 @@ region_lambda
 
 # --- Extract and plot FOI
 foi_onnv <- extract_and_plot_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
+range(foi_onnv$foi_df$foi)
 
 # overall FOI
 foi_summary <- onnv_results_pop_grid$output$summary.fixed
-
 est_cameroonwide_foi <- list(
   mean = exp(foi_summary$mean),
   ciL  = exp(foi_summary$`0.025quant`),
@@ -200,7 +228,16 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4b.png",
        bg = "white")
 
 
+
+
 # --- Validate model----
+est_cameroonwide_foi <- list(
+  mean = exp(foi_summary$mean),
+  ciL  = exp(foi_summary$`0.025quant`),
+  ciU  = exp(foi_summary$`0.975quant`)
+)
+
+
 avg_susceptible_by_age <- numeric(nrow(age_groups))
 
 for (j in 1:nrow(age_groups)) {
@@ -230,6 +267,87 @@ total_cameroon_pop <- sum(values(cam_pop), na.rm = TRUE)  # ~26 million
 expected_infections <- total_cameroon_pop * est_cameroonwide_foi * cameroon_avg_susceptible
 
 sum(cameroon_age_2025$total)
+
+# -- cameroon wide summary 
+compute_foi_metrics <- function(foi_val, age_groups, w_age, cam_pop, total_cameroon_pop) {
+  
+  avg_susceptible_by_age <- numeric(nrow(age_groups))
+  
+  for (j in 1:nrow(age_groups)) {
+    a_lower <- age_groups$age_lower[j]
+    a_upper <- age_groups$age_upper[j]
+    age_width <- a_upper - a_lower
+    
+    if (foi_val > 1e-10) {
+      avg_susceptible_by_age[j] <- (1 / (foi_val * age_width)) *
+        (exp(-foi_val * a_lower) -
+           exp(-foi_val * a_upper))
+    } else {
+      avg_susceptible_by_age[j] <- 1
+    }
+  }
+  
+  avg_susceptible  <- sum(avg_susceptible_by_age * w_age)
+  avg_seroprev     <- 1 - avg_susceptible
+  infections       <- total_cameroon_pop * foi_val * avg_susceptible
+  
+  list(
+    avg_susceptible = avg_susceptible,
+    avg_seroprev    = avg_seroprev,
+    infections      = infections
+  )
+}
+
+# ── Run for mean, ciL, ciU ──────────────────────────────────────────────────
+
+total_cameroon_pop <- sum(values(cam_pop), na.rm = TRUE)
+
+metrics_mean <- compute_foi_metrics(est_cameroonwide_foi$mean, age_groups, w_age, cam_pop, total_cameroon_pop)
+metrics_ciL  <- compute_foi_metrics(est_cameroonwide_foi$ciL,  age_groups, w_age, cam_pop, total_cameroon_pop)
+metrics_ciU  <- compute_foi_metrics(est_cameroonwide_foi$ciU,  age_groups, w_age, cam_pop, total_cameroon_pop)
+
+# ── Collect results in a tidy summary ──────────────────────────────────────
+
+cameroon_summary <- data.frame(
+  metric    = c("FOI", "Avg susceptible", "Avg seroprev", "Expected infections"),
+  mean      = c(est_cameroonwide_foi$mean,  metrics_mean$avg_susceptible, metrics_mean$avg_seroprev, metrics_mean$infections),
+  ciL       = c(est_cameroonwide_foi$ciL,   metrics_ciL$avg_susceptible,  metrics_ciL$avg_seroprev,  metrics_ciL$infections),
+  ciU       = c(est_cameroonwide_foi$ciU,   metrics_ciU$avg_susceptible,  metrics_ciU$avg_seroprev,  metrics_ciU$infections)
+)
+
+cameroon_summary_fmt <- cameroon_summary
+cameroon_summary_fmt[, c("mean", "ciL", "ciU")] <- lapply(
+  cameroon_summary[, c("mean", "ciL", "ciU")],
+  function(x) formatC(x, format = "f", digits = 3)
+)
+
+print(cameroon_summary_fmt)
+
+# number of individuals with a history of ONNV infection (ie seropositive)
+seropos_mean <- total_cameroon_pop * metrics_mean$avg_seroprev
+seropos_ciL  <- total_cameroon_pop * metrics_ciL$avg_seroprev
+seropos_ciU  <- total_cameroon_pop * metrics_ciU$avg_seroprev
+
+cat(sprintf(
+  "We estimated that an average of %s (95%% CI: %s-%s) 
+  individuals get infected each year and that in 2025, %s (95%% CI: %s-%s) individuals had a history of ONNV infection, 
+  representing %.1f%% (95%% CI: %.1f%%-%.1f%%) of the population.",
+  formatC(metrics_mean$infections, format = "f", digits = 0),
+  formatC(metrics_ciL$infections,  format = "f", digits = 0),
+  formatC(metrics_ciU$infections,  format = "f", digits = 0),
+  formatC(seropos_mean, format = "f", digits = 0),
+  formatC(seropos_ciL,  format = "f", digits = 0),
+  formatC(seropos_ciU,  format = "f", digits = 0),
+  metrics_mean$avg_seroprev * 100,
+  metrics_ciL$avg_seroprev  * 100,
+  metrics_ciU$avg_seroprev  * 100
+))
+
+
+
+
+
+
 
 
 # --- pop at predicted locations

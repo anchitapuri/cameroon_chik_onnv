@@ -583,8 +583,6 @@ titer_increases_comparison_mayv <- function(phi_df, mu_mus1) {
 }
 
 
-
-
 # --- Plot proportion positive 
 plot_seroprevalence <- function(chains_df) {
   
