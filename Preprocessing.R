@@ -1,4 +1,5 @@
 
+
 # Import libraries
 library(ggplot2)
 library(cowplot)
@@ -19,18 +20,15 @@ library(here)
 library(terra)
 library(exactextractr)
 library(raster)
+library(readxl)
+library(geodata)
 
-# read data files with labels 
+# --- Read data files 
+
+# original data
 meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/base_complete_MFI_meta.csv')
-nrow(meta_data)
-colnames(meta_data)
-length(unique(tolower(meta_data$DistrictOfresidence)))
 
-sum(is.na(meta_data$CHIKV_sE2))
-sum(is.na(meta_data$ONNV_VLP))
-sum(is.na(meta_data$MAYV_E2))
-
-# Load shapefile
+# shapefile #1
 cam_shapefile_districts <- read_sf('/Users/ap2488/Desktop/Cameroon_Analysis_2025/S4_Cameroon_health_districts_files/Caedistricts179_region.shp')
 # Second shapefile used (to find remaining mismatched districts)
 cam_shapefile_districts2 <- read_sf('/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_admin_boundaries/cmr_admin3.shp')
@@ -51,11 +49,31 @@ cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Came
 cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
 
+
+# excel sheet with additional district geometeries - these were missing from both the shapefiles
+missing_districts_geometeries <- read_excel("/Users/ap2488/Desktop/Cameroon_Analysis_2025/Districts_sante_2021.xls", sheet = "Sheet2")
+
+
+# drop NAs 
+nrow(meta_data) #633
+length(unique(tolower(meta_data$DistrictOfresidence))) #208
+
+sum(is.na(meta_data$CHIKV_sE2)) #920
+sum(is.na(meta_data$ONNV_VLP)) #11
+sum(is.na(meta_data$MAYV_E2)) #15
+sum(is.na(meta_data$AgeInYears)) #7
+sum(meta_data$AgeInYears == 0, na.rm = TRUE) #117 
+sum(is.na(meta_data$Sex))  #22
+unique(meta_data$Sex)
+sum(meta_data$Sex == 9, na.rm = TRUE) #9
+
+
 # ---1) Match district names in data with shapefiles to extract geometry for each district 
 # Clean names + create lower case district column
 cam_shapefile_districts$NAME2 <- gsub("DS_", "", cam_shapefile_districts$NAME2)
 cam_shapefile_districts <- cam_shapefile_districts %>%
   mutate(shapefile_district_lower = tolower(NAME2))
+
 
 # Check how many names and districts 
 length(unique(cam_shapefile_districts$NAME2))
@@ -67,7 +85,6 @@ districts_with_multiple_geoms <- cam_shapefile_districts %>%
   mutate(n_geoms = n()) %>%
   filter(n_geoms > 1) %>%
   arrange(NAME2)
-
 # manoka == 5 geometires - merge these 
 manoka_merged <- cam_shapefile_districts %>%
   filter(shapefile_district_lower == "manoka") %>%
@@ -84,14 +101,14 @@ other_districts <- cam_shapefile_districts %>%
   filter(shapefile_district_lower != "manoka")
 # Combine
 cam_shapefile_districts_merged <- bind_rows(other_districts, manoka_merged)
-
-
+length(unique(cam_shapefile_districts_merged$geometry)) #179 unique geometeries and districts 
+View(cam_shapefile_districts_merged)
 
 # --- Meta Data ---
 # Create lowercase district column for meta_data
 meta_data <- meta_data %>%
   mutate(district_lower = tolower(DistrictOfresidence))
-length(unique(meta_data$district_lower))
+length(unique(meta_data$district_lower)) #208 unique districts 
 
 
 # --- Non-matching districts between shapefile 1 and data 
@@ -101,7 +118,7 @@ non_matching_meta <- meta_data %>%
 # Print unique non-matching district names
 cat("\nNon-matching districts:\n")
 print(unique(non_matching_meta$district_lower))
-length(unique(non_matching_meta$district_lower))
+length(unique(non_matching_meta$district_lower)) #42 non matching districts 
 
 # Count rows for each non-matching district
 non_matching_counts <- non_matching_meta %>%
@@ -109,11 +126,11 @@ non_matching_counts <- non_matching_meta %>%
   arrange(desc(n))
 cat("\nCount of non-matching districts:\n")
 print(non_matching_counts)
-cat("\nTotal non-matching rows:", nrow(non_matching_meta), "\n")
+cat("\nTotal non-matching rows:", nrow(non_matching_meta), "\n") #this is 976 rows
 
 
 # --- Manual mapping ---- 
-meta_data_cleaned <- meta_data %>%
+meta_data_districts_added <- meta_data %>%
   mutate(district_lower = case_when(
     district_lower == "njombe penja" ~ "njombe-penja",
     district_lower == "tchollire" ~"tcholire",
@@ -127,8 +144,7 @@ meta_data_cleaned <- meta_data %>%
     district_lower == "bamenda 3" ~ "bamenda",
     district_lower == "nkongsamba" ~ "nkonsamba",
     district_lower == "garoua 1" ~ "garoua i",
-    district_lower == "ngaoundal" ~ "ngaoundere rural",
-    district_lower == "garoua urbain" ~ "garoua boulai",
+    district_lower == "garoua urbain" ~ "garoua i", # Garoua urban, the shape file should be Garoua I or 1
     district_lower == "eyumodjock" ~ "eyumojock",
     district_lower == "garoua 2" ~ "garoua ii",
     district_lower == "ndikinimeki" ~ "ndikinimiki",
@@ -136,7 +152,8 @@ meta_data_cleaned <- meta_data %>%
     district_lower == 'bandjoun' ~ "banjoun", 
     district_lower == 'bangangte' ~ "bangante",
     district_lower == 'bangourain'~ "bangorain",
-    
+    district_lower == 'garoua rural' ~ 'garoua ii' , # garoua rural == garoua ii
+    district_lower == 'maroua 2' ~ 'maroua rural', # same logic as before 2 == rural
     TRUE ~ district_lower
   ))
 
@@ -145,6 +162,7 @@ meta_data_cleaned <- meta_data %>%
 # Merge geometries in the second shapefile (in case it has duplicates too)
 cam_shapefile_districts2 <- cam_shapefile_districts2 %>%
   mutate(shapefile_district_lower2 = tolower(adm3_name1))
+
 
 cam_shapefile_districts2_merged <- cam_shapefile_districts2 %>%
   group_by(shapefile_district_lower2) %>%
@@ -159,7 +177,7 @@ length(unique(cam_shapefile_districts2_merged$geometry))
 # --- manually selected these districts that are in shapefile 2 and data
 districts_new_shapefile <- c('belabo', 'belel', 'evodoula', 'fotokol',
                              'gazawa', 'goulfey', 'nguelemendouka', 'njombe-penja',
-                             'oku')
+                             'oku', 'ngaoundal')
 rows_from_shapefile2 <- cam_shapefile_districts2 %>%
   filter(shapefile_district_lower2 %in% districts_new_shapefile)
 rows_to_add <- rows_from_shapefile2 %>%
@@ -169,11 +187,11 @@ rows_to_add <- rows_from_shapefile2 %>%
     geometry = geometry
     # Map other columns as needed
   )
+# add rows from shapefile #2 to original file
 cam_shapefile_districts_merged <- cam_shapefile_districts_merged %>%
   bind_rows(rows_to_add)
 cam_shapefile_districts_merged <- cam_shapefile_districts_merged %>%
   st_make_valid()
-
 
 # One geometry per district 
 cam_shapefile_districts_unique <- cam_shapefile_districts_merged %>%
@@ -182,17 +200,12 @@ cam_shapefile_districts_unique <- cam_shapefile_districts_merged %>%
   ungroup()
 
 
-# Join 
-meta_data_with_coords <- meta_data_cleaned %>%
-  left_join(cam_shapefile_districts_unique, 
-            by = c("district_lower" = "shapefile_district_lower"))
-
 # Check - should be 6336 rows
 nrow(meta_data_with_coords)
-
+colnames(meta_data_with_coords)
 
 # --- Check the remianing istricts in meta_data but NOT in shapefile
-# Rows lost == 218
+# Rows lost currently == 192
 unmatched_districts <- meta_data_with_coords %>%
   filter(!district_lower %in% cam_shapefile_districts_unique$shapefile_district_lower) %>%
   count(district_lower, sort = TRUE)
@@ -204,12 +217,78 @@ cat("Rows with geometry:", sum(!is.na(st_dimension(meta_data_with_coords$geometr
 print(unmatched_districts)
 sum(unmatched_districts$n)
 
+# Drop NAs and Chad rows
+meta_data_with_coords <- meta_data_with_coords |>
+  filter(!is.na(district_lower),
+         !district_lower %in% c("abeche", "biltine"))
+nrow(meta_data_with_coords) #6331
+
+
+# visualise where the missing geometeries fall 
+missing_districts_geometeries_sf <- missing_districts_geometeries %>%
+  mutate(
+    Latitude = as.numeric(Latitude),
+    Longitude = as.numeric(Longitude)
+  ) %>%
+  filter(!is.na(Latitude) & !is.na(Longitude)) %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
+
+# Make sure shapefile CRS matches (reproject if needed)
+cam_shapefile_districts_merged <- st_transform(cam_shapefile_districts_merged, crs = 4326)
+
+# Plot
+ggplot() +
+  geom_sf(data = cam_shapefile_districts_merged, fill = "lightgrey", color = "white", linewidth = 0.3) +
+  geom_sf(data = missing_districts_geometeries_sf, aes(color = Region), size = 3, alpha = 0.8) +
+  labs(
+    title = "Cameroon Districts with Survey Points",
+    color = "Region"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    legend.position = "right"
+  )
+
+
+sf_use_s2(FALSE)
+# Spatial join: finds which polygon each point falls within
+mapped_districts <- st_join(missing_districts_geometeries_sf, 
+                      cam_shapefile_districts_merged[, c("NAME2", "NAME1", "shapefile_district_lower")], 
+                               join = st_within)
+
+
+
+# For unmatched rows, swap district_lower with the correct shapefile district name
+meta_data_with_coords <- meta_data_with_coords %>%
+  left_join(district_name_mapping, by = c("district_lower" = "District")) %>%
+  mutate(district_lower = coalesce(shapefile_district_lower, district_lower)) %>%
+  dplyr::select(-shapefile_district_lower)
+colnames(meta_data_with_coords)
+
+
+
+
+# Join 
+meta_data_with_coords <- meta_data_districts_added %>%
+  left_join(cam_shapefile_districts_unique, 
+            by = c("district_lower" = "shapefile_district_lower"))
+
+
+
 # Plot to validate districts 
 sf_meta_data_with_coords <- st_as_sf(meta_data_with_coords)
 ggplot(sf_meta_data_with_coords) +
   geom_sf() +
   geom_sf_text(aes(label = district_lower), size = 2, check_overlap = TRUE) +
   theme_minimal()
+
+
+
+
+
+
+
 
 
 
@@ -233,6 +312,7 @@ districts <- sf_meta_data_with_coords %>%
   mutate(area_km2 = as.numeric(st_area(geometry)) / 1e6) %>%
   st_transform(crs = crs(cam_pop)) %>%
   mutate(district_id = dplyr::row_number())
+
 
 
 # Create population stack
@@ -399,6 +479,8 @@ ggplot() +
 
 sum(is.na(sf_meta_data_with_coords_pw$CHIKV_sE2))
 
+
+
 # Drop Nas + remove duplicates
 sf_meta_data_with_coords_pw <- sf_meta_data_with_coords_pw %>%
   drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP)
@@ -421,6 +503,9 @@ write.csv(preprocessed_meta_data_without_coords,
           '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv', 
           row.names = FALSE)
 nrow(preprocessed_meta_data_without_coords)
+
+
+
 
 sf_meta_data_with_coords_pw <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
 nrow(sf_meta_data_with_coords_pw)
@@ -711,3 +796,18 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1.png",
 
 
 
+
+# # Drop NAs and age = 0 and sex = 9 
+meta_data_clean <- subset(
+  meta_data,
+  !is.na(CHIKV_sE2) &
+  !is.na(ONNV_VLP) &
+  !is.na(MAYV_E2) &
+  !is.na(AgeInYears) &
+  AgeInYears != 0 &
+  !is.na(Sex) &
+  Sex != 9
+)
+
+nrow(meta_data_clean) #5280
+nrow(meta_data) - nrow(meta_data_clean) # 1056 rows removed 
