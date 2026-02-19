@@ -1,5 +1,3 @@
-
-
 # Import libraries
 library(ggplot2)
 library(cowplot)
@@ -22,6 +20,8 @@ library(exactextractr)
 library(raster)
 library(readxl)
 library(geodata)
+library(ggspatial)
+library(patchwork)
 
 # --- Read data files 
 
@@ -57,6 +57,7 @@ missing_districts_geometeries <- read_excel("/Users/ap2488/Desktop/Cameroon_Anal
 # drop NAs 
 nrow(meta_data) #633
 length(unique(tolower(meta_data$DistrictOfresidence))) #208
+View(unique(tolower(meta_data$DistrictOfresidence)))
 
 sum(is.na(meta_data$CHIKV_sE2)) #920
 sum(is.na(meta_data$ONNV_VLP)) #11
@@ -66,6 +67,7 @@ sum(meta_data$AgeInYears == 0, na.rm = TRUE) #117
 sum(is.na(meta_data$Sex))  #22
 unique(meta_data$Sex)
 sum(meta_data$Sex == 9, na.rm = TRUE) #9
+sum(is.na(meta_data$DistrictOfresidence)) #3
 
 
 # ---1) Match district names in data with shapefiles to extract geometry for each district 
@@ -156,7 +158,7 @@ meta_data_districts_added <- meta_data %>%
     district_lower == 'maroua 2' ~ 'maroua rural', # same logic as before 2 == rural
     TRUE ~ district_lower
   ))
-
+length(unique(meta_data_districts_added$district_lower)) #198 districts - some names merged 
 
 # Use hapefile 2 since there are still districts in data missing from shapefile 1
 # Merge geometries in the second shapefile (in case it has duplicates too)
@@ -192,7 +194,6 @@ cam_shapefile_districts_merged <- cam_shapefile_districts_merged %>%
   bind_rows(rows_to_add)
 cam_shapefile_districts_merged <- cam_shapefile_districts_merged %>%
   st_make_valid()
-
 # One geometry per district 
 cam_shapefile_districts_unique <- cam_shapefile_districts_merged %>%
   group_by(shapefile_district_lower) %>%
@@ -200,32 +201,46 @@ cam_shapefile_districts_unique <- cam_shapefile_districts_merged %>%
   ungroup()
 
 
-# Check - should be 6336 rows
-nrow(meta_data_with_coords)
-colnames(meta_data_with_coords)
 
 # --- Check the remianing istricts in meta_data but NOT in shapefile
 # Rows lost currently == 192
-unmatched_districts <- meta_data_with_coords %>%
+unmatched_districts <- meta_data_districts_added %>%
   filter(!district_lower %in% cam_shapefile_districts_unique$shapefile_district_lower) %>%
   count(district_lower, sort = TRUE)
 cat("\nMerge summary:\n")
 cat("Total rows in meta_data:", nrow(meta_data), "\n")
-cat("Total rows after merge:", nrow(meta_data_with_coords), "\n")
-cat("Rows with geometry:", sum(!is.na(st_dimension(meta_data_with_coords$geometry))), "\n")
+cat("Total rows after merge:", nrow(meta_data_districts_added), "\n")
+ 
 
 print(unmatched_districts)
 sum(unmatched_districts$n)
 
+
 # Drop NAs and Chad rows
-meta_data_with_coords <- meta_data_with_coords |>
+meta_data_districts_added <- meta_data_districts_added |>
   filter(!is.na(district_lower),
          !district_lower %in% c("abeche", "biltine"))
-nrow(meta_data_with_coords) #6331
+nrow(meta_data_districts_added) #6331
+
+
+# districts still unmatched 
+remaining_unmatched_districts <- c(
+  "boko",
+  "dang",
+  "mozogo",
+  "bangue",
+  "japoma",
+  "odza",
+  "abo",
+  "nkolbisson",
+  "mvog-ada" 
+)
+subset_missing_districts_geometeries <- missing_districts_geometeries %>%
+  filter(tolower(District) %in% remaining_unmatched_districts)
 
 
 # visualise where the missing geometeries fall 
-missing_districts_geometeries_sf <- missing_districts_geometeries %>%
+missing_districts_geometeries_sf <- subset_missing_districts_geometeries %>%
   mutate(
     Latitude = as.numeric(Latitude),
     Longitude = as.numeric(Longitude)
@@ -235,7 +250,7 @@ missing_districts_geometeries_sf <- missing_districts_geometeries %>%
 
 # Make sure shapefile CRS matches (reproject if needed)
 cam_shapefile_districts_merged <- st_transform(cam_shapefile_districts_merged, crs = 4326)
-
+quartz()
 # Plot
 ggplot() +
   geom_sf(data = cam_shapefile_districts_merged, fill = "lightgrey", color = "white", linewidth = 0.3) +
@@ -253,20 +268,22 @@ ggplot() +
 
 sf_use_s2(FALSE)
 # Spatial join: finds which polygon each point falls within
-mapped_districts <- st_join(missing_districts_geometeries_sf, 
-                      cam_shapefile_districts_merged[, c("NAME2", "NAME1", "shapefile_district_lower")], 
-                               join = st_within)
+mapped_districts <- st_join(
+  missing_districts_geometeries_sf,
+  cam_shapefile_districts_merged[, c("shapefile_district_lower")],
+  join = st_intersects
+)
 
-
-
-# For unmatched rows, swap district_lower with the correct shapefile district name
-meta_data_with_coords <- meta_data_with_coords %>%
-  left_join(district_name_mapping, by = c("district_lower" = "District")) %>%
+district_lookup <- mapped_districts %>%
+  st_drop_geometry() %>%
+  dplyr::select(District, shapefile_district_lower)
+district_lookup
+# replace meta data missing districs with mapped districts 
+meta_data_districts_added <- meta_data_districts_added %>%
+  left_join(district_lookup,
+            by = c("district_lower" = "District")) %>%
   mutate(district_lower = coalesce(shapefile_district_lower, district_lower)) %>%
   dplyr::select(-shapefile_district_lower)
-colnames(meta_data_with_coords)
-
-
 
 
 # Join 
@@ -275,31 +292,23 @@ meta_data_with_coords <- meta_data_districts_added %>%
             by = c("district_lower" = "shapefile_district_lower"))
 
 
+cat("Rows with geometry:", sum(!is.na(st_is_empty(meta_data_with_coords$geometry))), "\n")
+
 
 # Plot to validate districts 
 sf_meta_data_with_coords <- st_as_sf(meta_data_with_coords)
+
+quartz() 
 ggplot(sf_meta_data_with_coords) +
   geom_sf() +
   geom_sf_text(aes(label = district_lower), size = 2, check_overlap = TRUE) +
   theme_minimal()
 
 
-
-
-
-
-
-
-
+# total 6331 rows with valid geometry!
 
 
 # --- 2) Population-Weighted Centroids 
-# Calculates the geographic center of each district weighted by where people actually live,
-# rather than the simple geometric cente
-sf_meta_data_with_coords <- st_as_sf(meta_data_with_coords) %>%
-  filter(!st_is_empty(geometry)) %>%
-  filter(!is.na(st_dimension(geometry)))
-nrow(sf_meta_data_with_coords)
 
 # Create district polygons with area
 districts <- sf_meta_data_with_coords %>%
@@ -354,7 +363,7 @@ centroids_df <- exact_extract(
 ) %>%
   dplyr::bind_cols(districts %>% st_drop_geometry() %>% dplyr::select(district_lower, district_id)) %>%
   left_join(
-    districts %>% st_drop_geometry() %>% select(district_lower, area_km2),  # Drop geometry here
+    districts %>% st_drop_geometry() %>% dplyr::select(district_lower, area_km2),  # Drop geometry here
     by = "district_lower"
   )
 
@@ -450,20 +459,20 @@ sf_meta_data_with_coords_pw <- sf_meta_data_with_coords %>%
   left_join(
     centroids_df %>% 
       st_drop_geometry() %>%  # Drop geometry to avoid duplication
-      select(-district_id), 
+      dplyr::select(-district_id), 
     by = "district_lower"
   ) %>%
-  left_join(aeg_pw_df %>% select(district_lower, aeg_pw_district), by = "district_lower") %>%
-  left_join(alb_pw_df %>% select(district_lower, alb_pw_district), by = "district_lower") %>%
-  left_join(fun_pw_df %>% select(district_lower, fun_pw_district), by = "district_lower") %>%
-  left_join(gam_pw_df %>% select(district_lower, gam_pw_district), by = "district_lower")
+  left_join(aeg_pw_df %>% dplyr::select(district_lower, aeg_pw_district), by = "district_lower") %>%
+  left_join(alb_pw_df %>% dplyr::select(district_lower, alb_pw_district), by = "district_lower") %>%
+  left_join(fun_pw_df %>% dplyr::select(district_lower, fun_pw_district), by = "district_lower") %>%
+  left_join(gam_pw_df %>% dplyr::select(district_lower, gam_pw_district), by = "district_lower")
 
 
 # --- Validate: Plot Population weighted vs unweighted coords 
 sf_use_s2(FALSE)
 unweighted_centroids <- st_centroid(sf_meta_data_with_coords)
 unweighted_centroids <- st_coordinates(unweighted_centroids)
-
+quartz()
 ggplot() +
   # Plot the polygons
   geom_sf(data = sf_meta_data_with_coords, fill = "white", color = "black", linewidth = 0.3) +
@@ -477,42 +486,44 @@ ggplot() +
   labs(title = "Cameroon: Population-Weighted Centroids",
        x = "Longitude", y = "Latitude")
 
-sum(is.na(sf_meta_data_with_coords_pw$CHIKV_sE2))
-
-
-
-# Drop Nas + remove duplicates
-sf_meta_data_with_coords_pw <- sf_meta_data_with_coords_pw %>%
-  drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP)
-
-sf_meta_data_with_coords_pw <- sf_meta_data_with_coords_pw[!duplicated(sf_meta_data_with_coords_pw$Sample), ]
-
-length(unique(sf_meta_data_with_coords_pw$district_lower))
-
-# Add year of survey column
-sf_meta_data_with_coords_pw$year_of_survey <- as.numeric(substr(sf_meta_data_with_coords_pw$Sample, 1, 4))
-unique(sf_meta_data_with_coords_pw$year_of_survey)
-nrow(sf_meta_data_with_coords_pw)
-
 # --- Save file with pop weighted coords and mosquito proportions for spatial analysis 
-saveRDS(sf_meta_data_with_coords_pw, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
+
+# -- drop duplicated ids (use ids as identification of each sample in later analysis)
+length(unique(sf_meta_data_with_coords_pw$id[duplicated(sf_meta_data_with_coords_pw$id)]))
+sf_meta_data_with_coords_pw[duplicated(sf_meta_data_with_coords_pw$id) | duplicated(sf_meta_data_with_coords_pw$id, fromLast = TRUE), ]
+
+sf_meta_data_with_coords_pw_filtered <- sf_meta_data_with_coords_pw |>
+  distinct(id, .keep_all = TRUE)
+
+# Verify
+nrow(sf_meta_data_with_coords_pw_filtered)  # should be 6324
+
+
+saveRDS(sf_meta_data_with_coords_pw_filtered, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
+
 # Also save dataframe without geometry for Stan Multisero model
-preprocessed_meta_data_without_coords <- sf_meta_data_with_coords_pw %>%
+preprocessed_meta_data_without_coords <- sf_meta_data_with_coords_pw_filtered %>%
   sf::st_drop_geometry()
+
 write.csv(preprocessed_meta_data_without_coords, 
           '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv', 
           row.names = FALSE)
-nrow(preprocessed_meta_data_without_coords)
 
 
 
+# --- Figure 1: Visualising the metadata 
 
-sf_meta_data_with_coords_pw <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
-nrow(sf_meta_data_with_coords_pw)
-length(unique(sf_meta_data_with_coords_pw$geometry))
- 
+# Add year of survey column
+sf_meta_data_with_coords_pw_filtered$year_of_survey <- as.numeric(substr(sf_meta_data_with_coords_pw_filtered$Sample, 1, 4))
+unique(sf_meta_data_with_coords_pw_filtered$year_of_survey)
+nrow(sf_meta_data_with_coords_pw_filtered)
+
+#sf_meta_data_with_coords_pw <- sf_meta_data_with_coords_pw[!duplicated(sf_meta_data_with_coords_pw$Sample), ]
+
+
+
 # --- Figure 1 ----
-location_counts <- sf_meta_data_with_coords_pw %>%
+location_counts <- sf_meta_data_with_coords_pw_filtered %>%
   st_drop_geometry() %>%  # Remove spatial features
   group_by(district_lower, Longitude, Latitude) %>%
   summarise(n_samples = n(), .groups = 'drop')
@@ -542,23 +553,23 @@ inset_map <- ggplot(cam_pop_df, aes(x = x, y = y, fill = pop_density)) +
   coord_equal() +
   theme_void() +
   theme(
-     legend.position = c(0.5, 0.05),   
+     legend.position  = c(0.5, 0.05),   
      legend.text = element_text(size = 11),
      legend.title = element_text(size = 11),
      legend.direction = "horizontal",    
      legend.margin = margin(20, 0, 0, 0),  # adds space above the legend
-     plot.background = element_rect(fill = "white", color = "black", linewidth = 0.5),
+     #plot.background = element_rect(fill = "white", color = "black", linewidth = 0.5),
      plot.margin = margin(10, 5, 15, 5)
   )
 
 # Figure 1a: Map of Cameroon with sample collection locations
 fig1a <- ggplot() +
-  geom_sf(data = sf_meta_data_with_coords_pw, fill = "#ffffff", color = "#6d7275") +
+  geom_sf(data = sf_meta_data_with_coords_pw_filtered, fill = "#ffffff", color = "#6d7275") +
   geom_point(data = location_counts, 
              aes(x = Longitude, y = Latitude, size = n_samples),
              shape = 21, fill = "#015b69", colour = "white", alpha = 0.85) +
   scale_size_continuous(name = "Number of \nSamples", range = c(2, 10),
-                        breaks = seq(0, max(location_counts$n_samples), by = 30), limits = c(0, max(location_counts$n_samples))) +
+                        breaks = seq(0, max(location_counts$n_samples), by = 30)) +
   annotation_scale(
     plot_unit = "km",
     bar_cols = c("black", "white"),  # alternating black/white like the reference
@@ -567,7 +578,7 @@ fig1a <- ggplot() +
     pad_y = unit(0.8, "cm"),
     text_cex = 1.5      
   ) +
-  theme_minimal()  +
+  theme_minimal(base_size = 11)  +
   theme(
     panel.grid = element_blank(),
     axis.text = element_blank(),
@@ -575,22 +586,22 @@ fig1a <- ggplot() +
     axis.title = element_blank(),
     legend.title = element_text(size = 20),                             # Legend title
     legend.text = element_text(size = 20) ,                              # Legend text
-    legend.position = c(0.97, 0.4)
+    legend.position = c(1.05, 0.4),
+    legend.key.height = unit(0.4, "cm"),
+    legend.spacing.y  = unit(0.2, "cm")
   )
-
-# Add the inset map using patchwork
+quartz()
 fig1a_with_inset <- fig1a +
-  inset_element(inset_map, 
-    left = -0.12,              # push it further left
-    bottom = 0.50, 
-    right = 0.42,              # narrow the right edge
-    top = 1.02,
-    align_to = "panel")
+  inset_element(
+    inset_map, left = -1, bottom = 0.5, right = 1, top = 1, align_to = 'plot')
+
 print(fig1a_with_inset)
+
+
 
 # --- Save Figure 1a
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1a.png", 
-       plot = fig1a_with_inset,
+       plot = fig1a_with_inset,  
        width = 10, 
        height = 10, 
        units = "in", 
@@ -598,7 +609,7 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1a.png",
        bg = "white")
 
 # Figure 1b: Number of samples by year of survey
-fig1b <- sf_meta_data_with_coords_pw %>%
+fig1b <- sf_meta_data_with_coords_pw_filtered %>%
   st_drop_geometry() %>%  # Remove geometry for plotting
   group_by(year_of_survey) %>%
   summarise(n_samples = n()) %>%
@@ -639,21 +650,16 @@ summarise(
   total_M = sum(M),
   total_F = sum(F)
 )
-sum(is.na(sf_meta_data_with_coords_pw$Sex))
-sum(sf_meta_data_with_coords_pw$Sex == 9, na.rm = TRUE)
-table(sf_meta_data_with_coords_pw$Sex)
+sum(is.na(sf_meta_data_with_coords_pw_filtered$Sex)) #21
+sum(sf_meta_data_with_coords_pw_filtered$Sex == 9, na.rm = TRUE) #9 
+sum(is.na(sf_meta_data_with_coords_pw_filtered$AgeInYears)) # 6 
+table(sf_meta_data_with_coords_pw_filtered$Sex)
 
-mean(sf_meta_data_with_coords_pw$AgeInYears, na.rm = TRUE)
-
-# sex = NA -> 18
-# sex = 9 -> 2
-# age = NA  -> 4 (of these two are, 3 are female (2) and 1 is male (1)
-
-sum(is.na(sf_meta_data_with_coords_pw$AgeInYears))
-sf_meta_data_with_coords_pw[is.na(sf_meta_data_with_coords_pw$AgeInYears), ]
+# Mean age = 18
+mean(sf_meta_data_with_coords_pw_filtered$AgeInYears, na.rm = TRUE)
 
 
-pyramid_data <- sf_meta_data_with_coords_pw %>%
+pyramid_data <- sf_meta_data_with_coords_pw_filtered %>%
   st_drop_geometry() %>%
   filter(!is.na(Sex), !is.na(AgeInYears)) %>%
   mutate(
@@ -688,8 +694,7 @@ pyramid_data <- sf_meta_data_with_coords_pw %>%
 sample_totals <- pyramid_data %>%
   group_by(Sex_label) %>%
   summarise(total_samples = sum(abs(count)), .groups = 'drop')
-
-
+sample_totals
 # Calculate expected samples based on census proportions
 # You'll need to combine your census data into 10-year age groups too
 expected_data <- cameroon_age_2025 %>%
@@ -767,7 +772,7 @@ fig1c <- ggplot(pyramid_data, aes(x = age_group, y = count, fill = Sex_label)) +
         aspect.ratio = 0.75,
         legend.text = element_text(size = 24),
         legend.title = element_text(size = 20))
-
+quartz()
 print(fig1c)
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1c.png", 
        plot = fig1c,    # swap for your actual plot object name
@@ -780,12 +785,12 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1c.png",
 
 
 fig1 <- (fig1a_with_inset | (fig1b / fig1c)) + plot_layout(widths = c(2, 1))
-print(fig1)
+
 
 
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1.png", 
        plot = fig1,    # swap for your actual plot object name
-       width = 18, 
+       width = 19.5, 
        height = 12, 
        units = "in", 
        dpi = 300,

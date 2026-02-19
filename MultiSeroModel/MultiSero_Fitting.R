@@ -40,37 +40,62 @@ nrow(meta_data)
 
 
 # Remove NAs
-meta_data <- meta_data %>%
+meta_data_full_model <- meta_data %>%
   drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP)
+nrow(meta_data_full_model)
+
+
+meta_data_onnv_only_model <- meta_data %>%
+  drop_na(MAYV_E2, ONNV_VLP)
+nrow(meta_data_onnv_only_model)
 
 
 # Log CHIK, ONNV and MAY
 cols_to_log <- c("CHIKV_sE2", "MAYV_E2", "ONNV_VLP")
 new_cols_names <- paste0(cols_to_log, "_log")
-meta_data[new_cols_names] <- lapply(meta_data[cols_to_log], log)
 
-# Extract only Alpha virus cols
-meta_data_alpha <- meta_data %>%
+
+meta_data_full_model[new_cols_names] <- lapply(meta_data_full_model[cols_to_log], log)
+meta_data_onnv_only_model[new_cols_names] <- lapply(meta_data_onnv_only_model[cols_to_log], log)
+
+
+
+# Extract only pathogen cols
+full_model_alpha <- meta_data_full_model %>%
   dplyr::select(CHIKV_sE2_log, MAYV_E2_log, ONNV_VLP_log)
-nrow(meta_data_alpha)
+nrow(full_model_alpha)
+
+onnv_only_model_alpha <- meta_data_onnv_only_model %>%
+  dplyr::select(CHIKV_sE2_log, MAYV_E2_log, ONNV_VLP_log)
+nrow(onnv_only_model_alpha)
 
 
-# pathogen names for the model (circulating pathogens first)
-pathogens = c("ONNV_VLP_log","CHIKV_sE2_log","MAYV_E2_log")
+# pathogen names for the model 
+pathogens_full_model = c("ONNV_VLP_log","CHIKV_sE2_log","MAYV_E2_log")
+pathogens_onnv_only_model = c("ONNV_VLP_log","MAYV_E2_log")
 
-# prepare data for stan
-preprocessed_data <- prepare_multiplex_sero_data(
-  data = meta_data_alpha,
-  pathogens = pathogens,
+# run with all three 
+preprocessed_data_full_model <- prepare_multiplex_sero_data(
+  data = full_model_alpha,
+  pathogens = pathogens_full_model,
   present_pathogens = c("ONNV_VLP_log","CHIKV_sE2_log")
 )
 
-saveRDS(preprocessed_data, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_alpha.rds')
+# run with all three 
+preprocessed_data_onnv_only_model <- prepare_multiplex_sero_data(
+  data = onnv_only_model_alpha,
+  pathogens = pathogens_onnv_only_model,
+  present_pathogens = c("ONNV_VLP_log")
+)
 
-#--- chain starting values
-ini <- init_diffSds(preprocessed_data$data, nChains = 3)
+saveRDS(preprocessed_data_full_model, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_full_model.rds')
+saveRDS(preprocessed_data_onnv_only_model, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_onnv_only_model.rds')
 
-fit <- mod$sample(
+
+
+#--- Fit full model 
+ini <- init_diffSds(preprocessed_data_full_model$data, nChains = 3)
+fit_full_model <- mod$sample(
 data = preprocessed_data$data, 
 chains = 3, 
 iter_sampling = 3000, 
@@ -81,25 +106,45 @@ init = ini,
 save_cmdstan_config=TRUE
 )
 
+
+#--- Fit ONNV only model 
+ini <- init_diffSds(preprocessed_data_onnv_only_model$data, nChains = 3)
+fit_onnv_only_model <- mod$sample(
+data = preprocessed_data_onnv_only_model$data, 
+chains = 3, 
+iter_sampling = 3000, 
+refresh = 100, 
+iter_warmup = 1000, 
+parallel_chains = 3,
+init = ini,
+save_cmdstan_config=TRUE
+)
+
+
 #save fits
-fit$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/final_model_fits.rds')
-fit <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/redone_final_model_fits.rds')
+fit_full_model$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/fit_full_model.rds')
+fit_onnv_only_model$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/fit_onnv_only_model.rds')
+
+
+# Read fit RDS
+fit_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/diff_init_full_model_fits.rds')
 
 # extract chains
-chains <- fit$draws(format='df')
+chains <- fit_full_model$draws(format='df')
 chains_df <- as.data.frame(chains)
 
 # Plot trace plots with all chains clearly visible
 color_scheme_set("mix-blue-red")
-p1 <- mcmc_trace(fit_final_model$draws(c("seroAll", "lp__")))
-p2 <- mcmc_trace(fit_final_model$draws(c("mu0", "mu1")))
-p3 <- mcmc_trace(fit_final_model$draws(c('sd0','sd1')))
-p4 <- mcmc_trace(fit_final_model$draws(c('phi','rho00')))
-
+p1 <- mcmc_trace(fit_full_model$draws(c("seroAll", "lp__")))
+p2 <- mcmc_trace(fit_full_model$draws(c("mu0", "mu1")))
+p3 <- mcmc_trace(fit_full_model$draws(c('sd0','sd1')))
+p4 <- mcmc_trace(fit_full_model$draws(c('phi','rho00')))
+quartz()
 print(p1 + p2 + p3 + p4)
 
 # Plot fits (neg component, neg-CR component, pos component)
-distfits <- plot_fits(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens, show_crossreactive_for = seq_along(preprocessed_data$pathogens))
+distfits <- plot_fits(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens, show_crossreactive_for = seq_along(preprocessed_data_full_model$pathogens))
+quartz()
 distfits$fitPN 
 
 ggsave(
@@ -113,24 +158,21 @@ ggsave(
 )
 
 # extract phi and mu1 posterior distributions
-phi <- extract_phi(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
+phi <- extract_phi(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
 print(phi)
-mu <- extract_mu(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
+mu <- extract_mu(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
 print(mu)
-sero <- extract_sero(chains_df, preprocessed_data$data, pathogens=preprocessed_data$pathogens)
-
+sero <- extract_sero(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
+print(sero)
 
 # MAYV homologous vs cross reactive increase 
 # --- Extract cross reactivity - MAYV vs ONNV and CHIK 
 CR_mayv <- titer_increases_comparison_mayv(phi$phi, mu$mus1)
 CR_mayv
 
-phi$phi
-
 # plot titre increease due to infection / CR for each pathogen
 p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
 print(p_CR)
-
 
 ggsave(
   filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2b.png',
@@ -175,10 +217,8 @@ ggsave(
 
 
 # --- Cluster assignment based on max probability - For INLA analysis 
-
-# Component labels for INLA 
-N  <- preprocessed_data$data$N
-nC <- preprocessed_data$data$nC
+N  <- preprocessed_data_full_model$data$N
+nC <- preprocessed_data_full_model$data$nC
 draws_post <- as_draws_df(fit$draws("post_prob"))
 prob_matrix <- matrix(NA_real_, nrow = N, ncol = nC)
 for (n in 1:N) {
@@ -189,6 +229,14 @@ for (n in 1:N) {
 
 cluster_assignment <- apply(prob_matrix, 1, which.max)
 table(cluster_assignment)
+
+
+# plot titre with cluster prob overlayed 
+
+
+
+
+
 
 # add hard assignmnet back to data 
 # 1 = Negative , 2 = ONNV pos and 3 = CHIK Pos
@@ -213,16 +261,22 @@ ggplot(meta_data_alpha,
   ) +
   theme_minimal()
 
-
 # save file with labels 
 write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv", row.names = FALSE)
 
 
 
+# compare estimtes of ONNV only model with full model 
+
+
+
+
+
+
+
+
 
 # 2D Mixture model fits (for comparison to multisero model estimates)# 2D mixture model fits 
-
-
 # ---- Fit CHIK  - using 50% for comp2
 fmm_normal_chik <- mixfit(meta_data_alpha$CHIKV_sE2_log, ncomp = 2, family="normal")
 plot(fmm_normal_chik)
