@@ -214,8 +214,6 @@ ggsave(
 )
 
 
-
-
 # --- Cluster assignment based on max probability - For INLA analysis 
 N  <- preprocessed_data_full_model$data$N
 nC <- preprocessed_data_full_model$data$nC
@@ -228,6 +226,8 @@ for (n in 1:N) {
 }
 
 cluster_assignment <- apply(prob_matrix, 1, which.max)
+apply(prob_matrix, 1, max)
+
 table(cluster_assignment)
 
 
