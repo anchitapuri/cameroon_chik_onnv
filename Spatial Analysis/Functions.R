@@ -126,10 +126,9 @@ plot_predicted_foi <- function(model, coop, pathogen_name = "ONNV") {
       data = foi_sf, aes(color = foi), size = 1.7, alpha = 1) +
     scale_color_gradientn(
         colours = c(
-        "#5b8e7d",  # deep blue (low)
-        "#5b8e7d",  # mid blue
-        "#ee4266",  # light red
-        "#ee4266"   # deep red (but we will reverse)
+        "#16425b",  # deep blue (low)
+        "#0a9396",  # mid blue
+        "#f72585"   # deep red (but we will reverse)
       ),
         name = "FOI (λ)",
         limits = c(0, max(foi_sf$foi)),

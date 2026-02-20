@@ -267,15 +267,6 @@ cat(sprintf(
 foi_onnv <- plot_predicted_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
 range(foi_onnv$foi_df$foi)
 
-# overall FOI
-foi_summary <- onnv_results_pop_grid$output$summary.fixed
-est_cameroonwide_foi <- list(
-  mean = exp(foi_summary$mean),
-  ciL  = exp(foi_summary$`0.025quant`),
-  ciU  = exp(foi_summary$`0.975quant`)
-)
-
-
 # --- Prob of seropositive proportion 
 
 # Plot
