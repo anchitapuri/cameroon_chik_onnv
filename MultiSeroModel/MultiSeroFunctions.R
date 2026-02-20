@@ -152,14 +152,15 @@ extract_covM <- function(chains, data){
       for(p in 1:data$nP) for(p2 in 1:data$nP){
         
         y <- paste(paste(c,p,sep=','),p2,sep=',')
-        x[p,p2] <- chains[i,paste(paste('covM[',y,sep=''),']',sep='')]
-        
+        name <- paste0("covM[", y, "]")
+        x[p,p2] <- chains[[name]][i]        
       }
       covM[[i]][[c]] <- x
     }
   }
   return(covM)
 }
+
 
 
 #----- Plot gaussian distribution fits
@@ -432,6 +433,7 @@ extract_sero <- function(chains, data, pathogens){
 }
 
 
+
 # --- Plot cross reactivity - ONNV vs CHIK
 plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
   
@@ -502,7 +504,7 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
                   width = 0.25, linewidth = 0.8) +
     facet_wrap(~ antigen_label) +
     scale_fill_manual(
-      values = c("ONNV" = "#c7035b", "CHIK" = "#028eb1"),
+      values = c("ONNV" = "#ce4760", "CHIK" = "#028090"),
       name = "Infecting pathogen"
     )  +
     labs(
@@ -616,6 +618,7 @@ plot_seroprevalence <- function(chains_df) {
     theme(
       plot.title = element_text(hjust = 0.5, size = 20),
       panel.grid = element_blank(),
+      legend.title = element_blank(),
       axis.text.x = element_text(size = 24),
       axis.text.y = element_text(size = 24),
       axis.title = element_text(size = 20),
@@ -623,7 +626,7 @@ plot_seroprevalence <- function(chains_df) {
       strip.background = element_rect(fill = "#ffffff"),
       legend.position = "right",
       panel.grid.major.x = element_blank(),
-      aspect.ratio = 0.6, 
+      aspect.ratio = 1, 
       plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"))
   
   # Print the values
@@ -633,3 +636,35 @@ plot_seroprevalence <- function(chains_df) {
   return(p)
 }
 
+
+
+plot_titres_coloured_by_clusters <- function(meta_data) {
+
+  cluster_labels <- c("1" = "ONNV -ve, CHIK -ve", "2" = "ONNV +ve", "3" = "CHIK +ve")
+  cluster_colours <- c("1" = "#002855", "2" = "#c7035b", "3" = "#028eb1")
+
+    p <- meta_data %>%
+        filter(!is.na(cluster)) %>%
+        ggplot(aes(x = log(ONNV_VLP),
+                  y = log(CHIKV_sE2),
+                  color = factor(cluster))) +
+    geom_point(alpha = 0.9, size = 1) +
+    scale_color_manual(values = cluster_colours, labels = cluster_labels) +
+    labs(
+      x = "Log(ONNV MFI)",
+      y = "Log(CHIKV MFI)") +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20),
+      panel.grid = element_blank(),
+      axis.text.x = element_text(size = 24),
+      axis.text.y = element_text(size = 24),
+      axis.title = element_text(size = 20),
+      legend.position = 'bottom',
+      legend.title = element_blank(),
+      legend.text = element_text(size = 20),
+      panel.grid.major.x = element_blank(),
+      aspect.ratio = 1,
+    )
+  return(p)
+}

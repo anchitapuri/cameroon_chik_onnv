@@ -43,6 +43,24 @@ cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Came
 cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
 
+cameroon_age_2025$total
+w_age <- cameroon_age_2025$total / sum(cameroon_age_2025$total)
+sum(cameroon_age_2025$total)
+
+age_groups <- data.frame(
+  age_string = cameroon_age_2025$Age,
+  stringsAsFactors = FALSE
+)
+# Extract lower and upper bounds from strings like "0-4", "5-9", etc.
+age_groups$age_lower <- as.numeric(sub("-.*", "", age_groups$age_string))
+age_groups$age_upper <- as.numeric(sub(".*-", "", age_groups$age_string))
+
+# Handle the last age group if it's something like "80+" 
+if (grepl("\\+", age_groups$age_string[nrow(age_groups)])) {
+  age_groups$age_lower[nrow(age_groups)] <- as.numeric(sub("\\+", "", age_groups$age_string[nrow(age_groups)]))
+  age_groups$age_upper[nrow(age_groups)] <- 120  # or whatever max age you want
+}
+
 # ----- Read preprocessed data with coords 
 meta_data_with_coords <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
 colnames(meta_data_with_coords)
@@ -50,10 +68,11 @@ nrow(meta_data_with_coords)
 
 # ----- Read labels data
 meta_data_with_labels <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv')
+colnames(meta_data_with_labels)
 nrow(meta_data_with_labels)
 
 # Convert coords to Easting and Northing
-sp_vill <- SpatialPoints(cbind(meta_data_with_coords$Longitude, meta_data_with_coords$Latitude))
+sp_vill <- SpatialPoints(cbind(meta_data_with_labels$Longitude, meta_data_with_labels$Latitude))
 points_to_extract <- terra::vect(sp_vill)
 length(points_to_extract)
 
@@ -79,6 +98,7 @@ nrow(model_data)
 
 sum(is.na(model_data$AgeInYears))
 sum(model_data$AgeInYears == 0, na.rm = TRUE)
+colnames(model_data)
 
 # --- Run INLA model for ONNV (with historic year of intro 1900)
 # --- Use population raster for prediction grid
@@ -153,11 +173,7 @@ min(region_lambda$lambda_weighted)
 
 
 
-# --- SPATIAL PREDICTIONS ---- 
-
-# --- Extract and plot FOI
-foi_onnv <- extract_and_plot_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
-range(foi_onnv$foi_df$foi)
+# --- SPATIAL PREDICTIONS: # Overall cameroon estimates ---- 
 
 # overall FOI
 foi_summary <- onnv_results_pop_grid$output$summary.fixed
@@ -166,107 +182,7 @@ est_cameroonwide_foi <- list(
   ciL  = exp(foi_summary$`0.025quant`),
   ciU  = exp(foi_summary$`0.975quant`)
 )
-
-# --- Prob of seropositive proportion 
-cameroon_age_2025$total
-w_age <- cameroon_age_2025$total / sum(cameroon_age_2025$total)
-sum(cameroon_age_2025$total)
-
-age_groups <- data.frame(
-  age_string = cameroon_age_2025$Age,
-  stringsAsFactors = FALSE
-)
-# Extract lower and upper bounds from strings like "0-4", "5-9", etc.
-age_groups$age_lower <- as.numeric(sub("-.*", "", age_groups$age_string))
-age_groups$age_upper <- as.numeric(sub(".*-", "", age_groups$age_string))
-
-# Handle the last age group if it's something like "80+" 
-if (grepl("\\+", age_groups$age_string[nrow(age_groups)])) {
-  age_groups$age_lower[nrow(age_groups)] <- as.numeric(sub("\\+", "", age_groups$age_string[nrow(age_groups)]))
-  age_groups$age_upper[nrow(age_groups)] <- 120  # or whatever max age you want
-}
-
-# Plot
-sero_onnv <- plot_predicted_seroprevalence(
-  foi_result = foi_onnv,
-  model = onnv_results_pop_grid,
-  age_groups = age_groups,
-  age_weights = w_age,
-  crs = 32633,
-  pathogen_name = "ONNV"
-)
-
-sero_onnv$prev_range
-
-# --- Annual Infections 
-infections_onnv <- plot_predicted_annual_infections(
-  foi_result = foi_onnv,
-  model = onnv_results_pop_grid,
-  age_groups = age_groups,
-  cam_pop = cam_pop,  # Your spatial population data
-  age_weights = w_age,  # Age distribution weights
-  crs = 32633,
-  pathogen_name = "ONNV"
-)
-
-# Access results
-infections_onnv$total_infections  # Total infections across all locations
-infections_onnv$susceptible_people  # Breakdown by age group
-infections_onnv$seropositive_people  # Min and max by location
-
-# combined plots 
-maps <- foi_onnv$plot + sero_onnv$plot + infections_onnv$plot 
-
-
-# --- Save Figure 1a
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4b.png", 
-       plot = maps,
-       width = 12, 
-       height = 15, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
-
-
-
-
-# --- Validate model----
-est_cameroonwide_foi <- list(
-  mean = exp(foi_summary$mean),
-  ciL  = exp(foi_summary$`0.025quant`),
-  ciU  = exp(foi_summary$`0.975quant`)
-)
-
-
-avg_susceptible_by_age <- numeric(nrow(age_groups))
-
-for (j in 1:nrow(age_groups)) {
-  a_lower <- age_groups$age_lower[j]
-  a_upper <- age_groups$age_upper[j]
-  age_width <- a_upper - a_lower
-  
-  if (est_cameroonwide_foi > 1e-10) {
-    avg_susceptible_by_age[j] <- (1/(est_cameroonwide_foi * age_width)) * 
-                                  (exp(-est_cameroonwide_foi * a_lower) - 
-                                   exp(-est_cameroonwide_foi * a_upper))
-  } else {
-    avg_susceptible_by_age[j] <- 1
-  }
-}
-
-
-# Weight by age distribution to get overall average susceptible
-cameroon_avg_susceptible <- sum(avg_susceptible_by_age * w_age)
-cameroon_avg_susceptible
 est_cameroonwide_foi
-
-cameroon_avg_seroprev = 1 - cameroon_avg_susceptible
-cameroon_avg_seroprev
-
-total_cameroon_pop <- sum(values(cam_pop), na.rm = TRUE)  # ~26 million
-expected_infections <- total_cameroon_pop * est_cameroonwide_foi * cameroon_avg_susceptible
-
-sum(cameroon_age_2025$total)
 
 # -- cameroon wide summary 
 compute_foi_metrics <- function(foi_val, age_groups, w_age, cam_pop, total_cameroon_pop) {
@@ -298,7 +214,7 @@ compute_foi_metrics <- function(foi_val, age_groups, w_age, cam_pop, total_camer
   )
 }
 
-# ── Run for mean, ciL, ciU ──────────────────────────────────────────────────
+# --- Run for mean, ciL, ciU
 
 total_cameroon_pop <- sum(values(cam_pop), na.rm = TRUE)
 
@@ -306,7 +222,7 @@ metrics_mean <- compute_foi_metrics(est_cameroonwide_foi$mean, age_groups, w_age
 metrics_ciL  <- compute_foi_metrics(est_cameroonwide_foi$ciL,  age_groups, w_age, cam_pop, total_cameroon_pop)
 metrics_ciU  <- compute_foi_metrics(est_cameroonwide_foi$ciU,  age_groups, w_age, cam_pop, total_cameroon_pop)
 
-# ── Collect results in a tidy summary ──────────────────────────────────────
+# ---summary 
 
 cameroon_summary <- data.frame(
   metric    = c("FOI", "Avg susceptible", "Avg seroprev", "Expected infections"),
@@ -330,7 +246,7 @@ seropos_ciU  <- total_cameroon_pop * metrics_ciU$avg_seroprev
 
 cat(sprintf(
   "We estimated that an average of %s (95%% CI: %s-%s) 
-  individuals get infected each year and that in 2025, %s (95%% CI: %s-%s) individuals had a history of ONNV infection, 
+  individuals get infected each year and that in 2020, %s (95%% CI: %s-%s) individuals had a history of ONNV infection, 
   representing %.1f%% (95%% CI: %.1f%%-%.1f%%) of the population.",
   formatC(metrics_mean$infections, format = "f", digits = 0),
   formatC(metrics_ciL$infections,  format = "f", digits = 0),
@@ -344,39 +260,63 @@ cat(sprintf(
 ))
 
 
+# --- Cameroon wide maps 
 
 
+# --- Extract and plot FOI
+foi_onnv <- plot_predicted_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
+range(foi_onnv$foi_df$foi)
 
-
-
-
-# --- pop at predicted locations
-pred_coords_sf <- st_as_sf(
-  data.frame(X = onnv_results$coop[, "X"] * 1000, 
-              Y = onnv_results$coop[, "Y"] * 1000),
-  coords = c("X", "Y"),
-  crs = 32633
+# overall FOI
+foi_summary <- onnv_results_pop_grid$output$summary.fixed
+est_cameroonwide_foi <- list(
+  mean = exp(foi_summary$mean),
+  ciL  = exp(foi_summary$`0.025quant`),
+  ciU  = exp(foi_summary$`0.975quant`)
 )
-# transform to match the cam_pop raster
-pred_coords_transformed <- sf::st_transform(pred_coords_sf, crs = terra::crs(cam_pop))
 
-# population raster has 13,710 × 9,233 = 126+ million cells
-# 15,035 prediction points
-# sampling less than 0.01% of the cells
-# aggregate population to match your grid resolution
-cam_pop_agg <- terra::aggregate(cam_pop, fact = 60, fun = sum, na.rm = TRUE)
 
-pop_at_locations <- terra::extract(cam_pop_agg, pred_coords_transformed, ID = FALSE)
+# --- Prob of seropositive proportion 
 
-# 1. Check population coverage
-captured_pop <- sum(pop_at_locations, na.rm = TRUE)
-total_pop <- sum(values(cam_pop), na.rm = TRUE)
-cat("Population captured: ", round(captured_pop/total_pop * 100, 1), "%\n")
+# Plot
+sero_onnv <- plot_predicted_seroprevalence(
+  foi_result = foi_onnv,
+  model = onnv_results_pop_grid,
+  age_groups = age_groups,
+  age_weights = w_age,
+  crs = 32633,
+  pathogen_name = "ONNV"
+)
 
-# 2. Check weighted average FOI
-weighted_avg_foi <- sum(lambda_pred * pop_at_locations, na.rm = TRUE) / sum(pop_at_locations, na.rm = TRUE)
-cat("Cameroon-wide FOI: ", est_cameroonwide_foi, "\n")
-cat("Population-weighted FOI: ", weighted_avg_foi, "\n")
+
+# --- Annual Infections 
+infections_onnv <- plot_predicted_annual_infections(
+  foi_result = foi_onnv,
+  model = onnv_results_pop_grid,
+  age_groups = age_groups,
+  cam_pop = cam_pop,  # Your spatial population data
+  age_weights = w_age,  # Age distribution weights
+  crs = 32633,
+  pathogen_name = "ONNV"
+)
+
+
+infections_onnv$total_infections  # Total infections across all locations
+infections_onnv$susceptible_people  # Breakdown by age group
+infections_onnv$seropositive_people  # Min and max by location
+
+# combined plots 
+maps <- foi_onnv$plot + sero_onnv$plot + infections_onnv$plot 
+
+
+# --- Save Figure 4a
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4b.png", 
+       plot = maps,
+       width = 12, 
+       height = 15, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
 
 
 

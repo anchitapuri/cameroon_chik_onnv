@@ -157,6 +157,7 @@ model {
 // More data-informed priors
   sero ~ beta(1,5);
   mu0 ~ normal(5, 0.5); 
+  mu1 ~ normal(2.5, 0.1);
   mu1[1] ~ normal(2, 0.1);
   mu1[2]  ~ normal(3, 0.1);
   sd0 ~ normal(1, 0.1);

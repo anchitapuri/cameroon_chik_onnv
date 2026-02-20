@@ -2,17 +2,17 @@
 # ---- Function for INLA models ----
 run_inla <- function(year_intro, data, cam_pop, positive_col) {
   
+
   # Calculate years of exposure
   data$age_intro <- data$year_of_survey - year_intro
   data$years_of_exposure <- pmin(data$age_intro, data$AgeInYears)
   
   data <- data[!is.na(data$years_of_exposure) & data$years_of_exposure > 0, ]
   
-  
   data_points <- data %>%
-    st_drop_geometry() %>%
-    filter(!is.na("Easting") & !is.na("Northing")) 
-  
+  st_drop_geometry() %>%
+    filter(!is.na(Easting) & !is.na(Northing)) %>%
+    filter(!is.na(ONNV_pos))
   
   # Build estimation coo
   cooe <- cbind(
@@ -95,7 +95,7 @@ run_inla <- function(year_intro, data, cam_pop, positive_col) {
 
 
 # --- Function to extract and plot FOI ---
-extract_and_plot_foi <- function(model, coop, pathogen_name = "ONNV") { 
+plot_predicted_foi <- function(model, coop, pathogen_name = "ONNV") { 
   # Get prediction indices
   index_pred <- inla.stack.index(model$stk.full, tag = "pred")$data
   
@@ -124,10 +124,17 @@ extract_and_plot_foi <- function(model, coop, pathogen_name = "ONNV") {
   p <- ggplot() +
     geom_sf(
       data = foi_sf, aes(color = foi), size = 1.7, alpha = 1) +
-    scale_color_viridis_c(
-      option = 'mako',
-      name = "FOI (λ)",
-      limits = c(0, max(foi_sf$foi))) +
+    scale_color_gradientn(
+        colours = c(
+        "#5b8e7d",  # deep blue (low)
+        "#5b8e7d",  # mid blue
+        "#ee4266",  # light red
+        "#ee4266"   # deep red (but we will reverse)
+      ),
+        name = "FOI (λ)",
+        limits = c(0, max(foi_sf$foi)),
+        guide = guide_colorbar(reverse = TRUE)
+      )+
     theme_minimal() + 
     theme(
       panel.grid = element_blank(),
@@ -664,7 +671,7 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
   invisible(list(plot = p, obs = obs, pred = pred, prevalence_draws = prevalence_draws))
 }
 
-# --- Propotion by mosquito distribution + log population 
+# --- Propotion by mosquito distribution + log population (using binary serostatus)
 calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, breaks_min) {
   var_mid <- rep(NaN, length(breaks_max))
   prop_pos <- matrix(NaN, length(breaks_max), 3)

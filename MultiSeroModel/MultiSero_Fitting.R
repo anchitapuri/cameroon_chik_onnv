@@ -58,8 +58,6 @@ new_cols_names <- paste0(cols_to_log, "_log")
 meta_data_full_model[new_cols_names] <- lapply(meta_data_full_model[cols_to_log], log)
 meta_data_onnv_only_model[new_cols_names] <- lapply(meta_data_onnv_only_model[cols_to_log], log)
 
-
-
 # Extract only pathogen cols
 full_model_alpha <- meta_data_full_model %>%
   dplyr::select(CHIKV_sE2_log, MAYV_E2_log, ONNV_VLP_log)
@@ -127,7 +125,8 @@ fit_onnv_only_model$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/fi
 
 
 # Read fit RDS
-fit_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/diff_init_full_model_fits.rds')
+fit_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/adapted_full_model_fits.rds')
+fit_onnv_only_model <-readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/adapted_onnv_only_model_fits.rds')
 
 # extract chains
 chains <- fit_full_model$draws(format='df')
@@ -142,16 +141,18 @@ p4 <- mcmc_trace(fit_full_model$draws(c('phi','rho00')))
 quartz()
 print(p1 + p2 + p3 + p4)
 
+
+
 # Plot fits (neg component, neg-CR component, pos component)
 distfits <- plot_fits(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens, show_crossreactive_for = seq_along(preprocessed_data_full_model$pathogens))
 quartz()
 distfits$fitPN 
 
 ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2a.png',
+  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2b.png',
   plot = distfits$fitPN,
-  width = 14,
-  height = 10,
+  width = 10,
+  height = 8,
   units = "in",
   dpi = 300,
   bg = "white"
@@ -165,6 +166,7 @@ print(mu)
 sero <- extract_sero(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
 print(sero)
 
+
 # MAYV homologous vs cross reactive increase 
 # --- Extract cross reactivity - MAYV vs ONNV and CHIK 
 CR_mayv <- titer_increases_comparison_mayv(phi$phi, mu$mus1)
@@ -175,8 +177,8 @@ p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
 print(p_CR)
 
 ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2b.png',
-  plot = p_CR,
+  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2c.png',
+  plot = p_CR$p,
   width = 12,
   height = 10,
   units = "in",
@@ -188,26 +190,11 @@ ggsave(
 p_sero <- plot_seroprevalence(chains_df)
 print(p_sero)
 
-p_sero
 
 ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2c.png',
+  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2d.png',
   plot = p_sero,
   width = 12,
-  height = 10,
-  units = "in",
-  dpi = 300
-)
-
-
-# Figures combined 
-# Reduce spacing between all plots
-fig2 <- distfits$fitPN / (p_CR | p_sero) + plot_layout(heights = c(2, 2)) 
-print(fig2)
-ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2.png',
-  plot = fig2,
-  width = 15,
   height = 10,
   units = "in",
   dpi = 300
@@ -217,7 +204,7 @@ ggsave(
 # --- Cluster assignment based on max probability - For INLA analysis 
 N  <- preprocessed_data_full_model$data$N
 nC <- preprocessed_data_full_model$data$nC
-draws_post <- as_draws_df(fit$draws("post_prob"))
+draws_post <- as_draws_df(fit_full_model$draws("post_prob"))
 prob_matrix <- matrix(NA_real_, nrow = N, ncol = nC)
 for (n in 1:N) {
   for (c in 1:nC) {
@@ -226,57 +213,81 @@ for (n in 1:N) {
 }
 
 cluster_assignment <- apply(prob_matrix, 1, which.max)
-apply(prob_matrix, 1, max)
-
+unique(cluster_assignment)
 table(cluster_assignment)
+cluster_assignment_with_uncertainty <- apply(prob_matrix, 1, max)
 
 
-# plot titre with cluster prob overlayed 
+# add labels back to meta data 
+nrow(prob_matrix)
+nrow(meta_data)
+nrow(meta_data_full_model)
 
+all(meta_data_full_model$id %in% meta_data$id)
+ 
+cluster_label <- max.col(prob_matrix, ties.method = "first")  #returns leftmost if two cols have equal (and max) prob
+cluster_prob <- apply(prob_matrix, 1, max)
 
+cluster_df <- meta_data_full_model |>
+  dplyr::select(id) |>
+  dplyr::mutate(
+    cluster = cluster_label,
+    cluster_prob = cluster_prob
+  )
 
+meta_data <- meta_data |>
+  dplyr::left_join(cluster_df, by = "id")
 
-
-
-# add hard assignmnet back to data 
-# 1 = Negative , 2 = ONNV pos and 3 = CHIK Pos
-meta_data_alpha$label <- cluster_assignment
-meta_data$label <- cluster_assignment
 
 # label 2 == ONNV pos 
 # label 3 == CHIK pos 
 # else 0 (Neg for both)
-meta_data$ONNV_pos <- as.integer(meta_data$label == 2)
-meta_data$CHIK_pos <- as.integer(meta_data$label == 3)
+meta_data$ONNV_pos <- as.integer(meta_data$cluster == 2)
+meta_data$CHIK_pos <- as.integer(meta_data$cluster == 3)
+
 
 # plot to visualise distribution, coloured by label
-ggplot(meta_data_alpha,
-       aes(x = ONNV_VLP_log,
-           y = CHIKV_sE2_log,
-           color = factor(label))) +
-  geom_point(alpha = 0.5, size = 2) +
-  labs(
-    color = "Cluster",
-    title = "Hard-assigned clusters"
-  ) +
-  theme_minimal()
+titres_plot <- plot_titres_coloured_by_clusters(meta_data)
+print(titres_plot)
+
+
+# -- Save figures and data with labels
+# Figures combined 
+fig2 <- distfits$fitPN / (titres_plot | p_CR$p | p_sero)  +
+  plot_layout(
+    widths = c(1, 1),
+    heights = c(1, 1)
+  )
+print(fig2)
+ggsave(
+  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2.png',
+  plot = fig2,
+  width = 20,
+  height = 12,
+  units = "in",
+  dpi = 300
+)
+
 
 # save file with labels 
 write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv", row.names = FALSE)
 
 
-
-# compare estimtes of ONNV only model with full model 
-
+# --- Comparison to other model 
 
 
+# 1) compare estimtes of ONNV only model with full model 
+chains_onnv_only <- fit_onnv_only_model$draws(format='df')
+chains_df_onnv_only <- as.data.frame(chains_onnv_only)
+
+sero_onnv_only <- extract_sero(chains_df_onnv_only, preprocessed_data_onnv_only_model$data, 
+pathogens=preprocessed_data_full_model$pathogens)
+print(sero)
 
 
 
 
-
-
-# 2D Mixture model fits (for comparison to multisero model estimates)# 2D mixture model fits 
+# 2) Compare multisero model estimates to 2D Mixture model fits 
 # ---- Fit CHIK  - using 50% for comp2
 fmm_normal_chik <- mixfit(meta_data_alpha$CHIKV_sE2_log, ncomp = 2, family="normal")
 plot(fmm_normal_chik)
