@@ -1,6 +1,5 @@
 # Fit geostatistical models to predict ONNV FOI and prevelance across Cameroon
 # using the stochastic partial differential equation (SPDE) approach and the R-INLA package.
-
 library(ggraph)
 library(igraph)
 library(lhs)
@@ -261,15 +260,12 @@ cat(sprintf(
 
 
 # --- Cameroon wide maps 
+source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
 
-
-# --- Extract and plot FOI
 foi_onnv <- plot_predicted_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
 range(foi_onnv$foi_df$foi)
 
 # --- Prob of seropositive proportion 
-
-# Plot
 sero_onnv <- plot_predicted_seroprevalence(
   foi_result = foi_onnv,
   model = onnv_results_pop_grid,
@@ -285,8 +281,8 @@ infections_onnv <- plot_predicted_annual_infections(
   foi_result = foi_onnv,
   model = onnv_results_pop_grid,
   age_groups = age_groups,
-  cam_pop = cam_pop,  # Your spatial population data
-  age_weights = w_age,  # Age distribution weights
+  cam_pop = cam_pop,  
+  age_weights = w_age, 
   crs = 32633,
   pathogen_name = "ONNV"
 )
@@ -298,7 +294,6 @@ infections_onnv$seropositive_people  # Min and max by location
 
 # combined plots 
 maps <- foi_onnv$plot + sero_onnv$plot + infections_onnv$plot 
-
 
 # --- Save Figure 4a
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4b.png", 

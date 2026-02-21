@@ -123,21 +123,31 @@ plot_predicted_foi <- function(model, coop, pathogen_name = "ONNV") {
   # Plot
   p <- ggplot() +
     geom_sf(
-      data = foi_sf, aes(color = foi), size = 1.7, alpha = 1) +
-    scale_color_gradientn(
-        colours = c(
-        "#16425b",  # deep blue (low)
-        "#0a9396",  # mid blue
-        "#f72585"   # deep red (but we will reverse)
-      ),
-        name = "FOI (λ)",
-        limits = c(0, max(foi_sf$foi)),
-        guide = guide_colorbar(reverse = TRUE)
-      )+
+      data = foi_sf, aes(color = foi), size = 0.5, alpha = 0.5) +
+      scale_color_gradientn(
+        colours = c("#1f363d",
+         "#40798c",
+        "#70a9a1",
+        "#f46036",
+        "#a4243b"
+        ),
+      values = scales::rescale(c(0, 0.25, 0.5, 0.7, 0.85, 1)),
+      name = "FOI (λ)",
+      limits = c(0, max(foi_sf$foi)),
+      guide = guide_colorbar(
+        direction = "horizontal",
+        barheight = unit(0.25, "cm"),
+        barwidth  = unit(6.5, "cm"),
+        title.position = "top",
+        label.position = "bottom",
+        ticks = TRUE,
+        ticks.length = unit(0.1, "cm")
+      )
+    ) +
     theme_minimal() + 
     theme(
       panel.grid = element_blank(),
-      legend.position = "right",
+      legend.position = "bottom",
       plot.title = element_text(size = 20),
       axis.text = element_blank(),      # Remove axis text (lat/long labels)
       axis.ticks = element_blank()) + 
@@ -217,17 +227,31 @@ plot_predicted_seroprevalence <- function(foi_result, model, age_groups, age_wei
   
   # Plot
   p <- ggplot() +
-    geom_sf(data = prev_sf, aes(color = prev), size = 1.7, alpha = 1, shape = 15) +
-    scale_color_viridis_c(
-      option = "mako",
+    geom_sf(data = prev_sf, aes(color = prev), size = 1.5, alpha = 0.5) +
+    scale_color_gradientn(
+        colours = c("#1f363d",
+         "#40798c",
+        "#70a9a1",
+        "#f46036",
+        "#a4243b"
+        ),
       name = "Seroprevalence",
       limits = c(0, max(prev_sf$prev, na.rm = TRUE)),
-      labels = scales::percent_format(accuracy = 1)
+      labels = scales::percent_format(accuracy = 1),
+      guide = guide_colorbar(
+      direction = "horizontal",
+      barheight = unit(0.25, "cm"),
+      barwidth  = unit(6.5, "cm"),
+      title.position = "top",
+      label.position = "bottom",
+      ticks = TRUE,
+      ticks.length = unit(0.1, "cm")
+  )
     ) +
     theme_minimal() +
     theme(
       panel.grid = element_blank(),
-      legend.position = "right",
+      legend.position = "bottom",
       plot.title = element_text(size = 20),
       axis.text = element_blank(),      # Remove axis text (lat/long labels)
       axis.ticks = element_blank()
@@ -366,17 +390,27 @@ plot_predicted_annual_infections <- function(foi_result, model, age_groups, age_
   # Plot
   p <- ggplot() +
     geom_sf(data = infections_sf, aes(color = infections), 
-            size = 1.7, alpha = 1, shape = 15) +
+            size = 1.5, alpha = 0.5) +
     scale_color_viridis_c(
-      option = "mako",
-      transform = "log10",
+      option = "magma",
+      trans = scales::pseudo_log_trans(base = 10),,
       name = "Annual\nInfections",
-      labels = scales::comma_format()
+      direction = -1,
+      labels = scales::comma_format(),
+      guide = guide_colorbar(
+        direction = "horizontal",
+        barheight = unit(0.25, "cm"),
+        barwidth  = unit(6.5, "cm"),
+        title.position = "top",
+        label.position = "bottom",
+        ticks = TRUE,
+        ticks.length = unit(0.1, "cm")
+      )
     ) +
     theme_minimal() +
     theme(
       panel.grid = element_blank(),
-      legend.position = "right",
+      legend.position = "bottom",
       plot.title = element_text(size = 20),
       axis.text = element_blank(),      # Remove axis text (lat/long labels)
       axis.ticks = element_blank()
