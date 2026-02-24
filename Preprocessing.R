@@ -27,7 +27,7 @@ library(patchwork)
 
 # original data
 meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/base_complete_MFI_meta.csv')
-
+nrow(meta_data)
 # shapefile #1
 cam_shapefile_districts <- read_sf('/Users/ap2488/Desktop/Cameroon_Analysis_2025/S4_Cameroon_health_districts_files/Caedistricts179_region.shp')
 # Second shapefile used (to find remaining mismatched districts)
@@ -58,6 +58,7 @@ missing_districts_geometeries <- read_excel("/Users/ap2488/Desktop/Cameroon_Anal
 nrow(meta_data) #633
 length(unique(tolower(meta_data$DistrictOfresidence))) #208
 View(unique(tolower(meta_data$DistrictOfresidence)))
+
 
 sum(is.na(meta_data$CHIKV_sE2)) #920
 sum(is.na(meta_data$ONNV_VLP)) #11
@@ -105,6 +106,7 @@ other_districts <- cam_shapefile_districts %>%
 cam_shapefile_districts_merged <- bind_rows(other_districts, manoka_merged)
 length(unique(cam_shapefile_districts_merged$geometry)) #179 unique geometeries and districts 
 View(cam_shapefile_districts_merged)
+
 
 # --- Meta Data ---
 # Create lowercase district column for meta_data
@@ -199,6 +201,10 @@ cam_shapefile_districts_unique <- cam_shapefile_districts_merged %>%
   group_by(shapefile_district_lower) %>%
   slice(1) %>%  # Just take the first geometry for each district
   ungroup()
+
+
+# shapefile 1 and 2 mergerd 
+saveRDS(cam_shapefile_districts_merged, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/cam_shapefile_districts_merged.rds")
 
 
 
@@ -297,7 +303,8 @@ cat("Rows with geometry:", sum(!is.na(st_is_empty(meta_data_with_coords$geometry
 
 # Plot to validate districts 
 sf_meta_data_with_coords <- st_as_sf(meta_data_with_coords)
-
+length(unique(sf_meta_data_with_coords$geometry))
+length(unique(sf_meta_data_with_coords$district_lower))
 quartz() 
 ggplot(sf_meta_data_with_coords) +
   geom_sf() +
@@ -495,16 +502,17 @@ sf_meta_data_with_coords_pw[duplicated(sf_meta_data_with_coords_pw$id) | duplica
 sf_meta_data_with_coords_pw_filtered <- sf_meta_data_with_coords_pw |>
   distinct(id, .keep_all = TRUE)
 
+
 # Verify
 nrow(sf_meta_data_with_coords_pw_filtered)  # should be 6324
-
+length(unique(sf_meta_data_with_coords_pw_filtered$geometry))
+length(unique(sf_meta_data_with_coords_pw_filtered$district_lower))
 
 saveRDS(sf_meta_data_with_coords_pw_filtered, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
 
 # Also save dataframe without geometry for Stan Multisero model
 preprocessed_meta_data_without_coords <- sf_meta_data_with_coords_pw_filtered %>%
   sf::st_drop_geometry()
-
 write.csv(preprocessed_meta_data_without_coords, 
           '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv', 
           row.names = FALSE)
@@ -650,6 +658,7 @@ summarise(
   total_M = sum(M),
   total_F = sum(F)
 )
+nrow(sf_meta_data_with_coords_pw_filtered) #6324
 sum(is.na(sf_meta_data_with_coords_pw_filtered$Sex)) #21
 sum(sf_meta_data_with_coords_pw_filtered$Sex == 9, na.rm = TRUE) #9 
 sum(is.na(sf_meta_data_with_coords_pw_filtered$AgeInYears)) # 6 

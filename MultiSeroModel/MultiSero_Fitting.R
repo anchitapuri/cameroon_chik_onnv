@@ -41,12 +41,20 @@ nrow(meta_data)
 
 # Remove NAs
 meta_data_full_model <- meta_data %>%
-  drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP)
+  drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP) %>%
+  mutate(stan_idx_full_model = row_number()) 
 nrow(meta_data_full_model)
+colnames(meta_data_full_model)
 
+# Number of samples per year (that the model was run on)
+meta_data_full_model %>%
+  group_by(year_of_survey) %>%
+  summarise(n_samples = n()) 
+unique(meta_data_full_model$year_of_survey)
 
 meta_data_onnv_only_model <- meta_data %>%
-  drop_na(MAYV_E2, ONNV_VLP)
+  drop_na(MAYV_E2, ONNV_VLP) %>%
+  mutate(stan_idx_full_model = row_number()) 
 nrow(meta_data_onnv_only_model)
 
 
@@ -89,7 +97,7 @@ preprocessed_data_onnv_only_model <- prepare_multiplex_sero_data(
 saveRDS(preprocessed_data_full_model, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_full_model.rds')
 saveRDS(preprocessed_data_onnv_only_model, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_onnv_only_model.rds')
 
-
+preprocessed_data_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_full_model.rds')
 
 #--- Fit full model 
 ini <- init_diffSds(preprocessed_data_full_model$data, nChains = 3)
@@ -212,6 +220,7 @@ for (n in 1:N) {
   }
 }
 
+
 cluster_assignment <- apply(prob_matrix, 1, which.max)
 unique(cluster_assignment)
 table(cluster_assignment)
@@ -224,12 +233,12 @@ nrow(meta_data)
 nrow(meta_data_full_model)
 
 all(meta_data_full_model$id %in% meta_data$id)
- 
-cluster_label <- max.col(prob_matrix, ties.method = "first")  #returns leftmost if two cols have equal (and max) prob
+
+cluster_label <- max.col(prob_matrix, ties.method = "first") #returns leftmost if two cols have equal (and max) prob
 cluster_prob <- apply(prob_matrix, 1, max)
 
 cluster_df <- meta_data_full_model |>
-  dplyr::select(id) |>
+  dplyr::select(id, stan_idx_full_model) |>   # <-- add stan_idx here
   dplyr::mutate(
     cluster = cluster_label,
     cluster_prob = cluster_prob
@@ -267,8 +276,7 @@ ggsave(
   units = "in",
   dpi = 300
 )
-
-
+head(meta_data)
 # save file with labels 
 write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv", row.names = FALSE)
 
@@ -289,7 +297,7 @@ print(sero)
 
 # 2) Compare multisero model estimates to 2D Mixture model fits 
 # ---- Fit CHIK  - using 50% for comp2
-fmm_normal_chik <- mixfit(meta_data_alpha$CHIKV_sE2_log, ncomp = 2, family="normal")
+fmm_normal_chik <- mixfit(full_model_alpha$CHIKV_sE2_log, ncomp = 2, family="normal")
 plot(fmm_normal_chik)
 #define threshold to get chik+ve and chik-ve
 pred.dat_normal_chik <-cbind(fmm_normal_chik$data, fmm_normal_chik$comp.prob)
@@ -298,7 +306,7 @@ table(chik_positive_normal)
 
 
 # ---- Fit ONNV  - using 50% for comp2
-fmm_normal_onnv <- mixfit(meta_data_alpha$ONNV_VLP_log, ncomp = 2, family="normal")
+fmm_normal_onnv <- mixfit(full_model_alpha$ONNV_VLP_log, ncomp = 2, family="normal")
 plot(fmm_normal_onnv)
 #define threshold to get onnv+ve and onnv-ve
 pred.dat_normal_onnv <- cbind(fmm_normal_onnv$data, fmm_normal_onnv$comp.prob)
@@ -307,7 +315,7 @@ table(onnv_positive_normal)
 
 
 # ---- Fit MAYV  - using 50% for comp2
-fmm_normal_mayv <- mixfit(meta_data_alpha$MAYV_E2_log, ncomp = 2, family="normal")
+fmm_normal_mayv <- mixfit(full_model_alpha$MAYV_E2_log, ncomp = 2, family="normal")
 plot(fmm_normal_mayv)
 #define threshold to get chik+ve and chik-ve
 pred.dat_normal_mayv<-cbind(fmm_normal_mayv$data, fmm_normal_mayv$comp.prob)

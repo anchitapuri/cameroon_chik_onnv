@@ -392,10 +392,9 @@ plot_predicted_annual_infections <- function(foi_result, model, age_groups, age_
     geom_sf(data = infections_sf, aes(color = infections), 
             size = 1.5, alpha = 0.5) +
     scale_color_viridis_c(
-      option = "magma",
-      trans = scales::pseudo_log_trans(base = 10),,
+      option = "mako",
+      trans = "log10",
       name = "Annual\nInfections",
-      direction = -1,
       labels = scales::comma_format(),
       guide = guide_colorbar(
         direction = "horizontal",
@@ -559,9 +558,12 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
   data_plot$age_intro         <- data_plot$year_of_survey - year_intro
   data_plot$years_of_exposure <- pmin(data_plot$age_intro, data_plot$AgeInYears)
   data_plot <- subset(data_plot, !is.na(years_of_exposure) & years_of_exposure > 0)
+
+  # Keep the id for proper alignment
+  kept_ids <- data_plot$id
   
   # Track original row numbers before any filtering
-  data_plot$original_row <- as.numeric(rownames(data_plot))
+  #data_plot$original_row <- as.numeric(rownames(data_plot))
   
   # Age groups
   age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
@@ -583,23 +585,30 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
   
   
   # Attach INLA predicted probabilities to each individual
-  data_plot$predicted  <- fit$mean
-  data_plot$pred_lower <- fit$`0.025quant`
-  data_plot$pred_upper <- fit$`0.975quant`
-  
+  data_plot <- data_plot %>%
+  dplyr::mutate(
+    predicted = fit$mean,
+    pred_lower = fit$`0.025quant`,
+    pred_upper = fit$`0.975quant`
+  )
   # ---- Observed summaries using posterior probabilities from chains ----
   # Find which components have pathogen_col = 1
   nC <- nrow(infM)
   positive_components <- which(infM[, pathogen_col] == 1)
+
+  # Find the columns in chains_df corresponding to the kept ids
+  prob_cols_list <- lapply(positive_components, function(comp) {
+    sprintf("post_prob[%d,%d]", match(kept_ids, meta_data_full_model$id), comp)
+  })
   
   # Get the indices we're keeping (after all filtering)
-  kept_indices <- data_plot$original_row
-  N_kept <- length(kept_indices)
+  #kept_indices <- data_plot$original_row
+  #N_kept <- length(kept_indices)
   
   # Extract probabilities ONLY for individuals we're keeping
-  prob_cols_list <- lapply(positive_components, function(comp) {
-    sprintf("post_prob[%d,%d]", kept_indices, comp)
-  })
+  #prob_cols_list <- lapply(positive_components, function(comp) {
+  #  sprintf("post_prob[%d,%d]", kept_indices, comp)
+  #})
   
   # Sum probabilities across all positive components for each draw
   probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
@@ -728,6 +737,83 @@ calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, 
 }
 
 
+
+# prediction FOI, seroprevelance and infections by region 
+aggregate_predictions_by_region <- function(
+  pred_sf,
+  regions_sf,
+  cam_pop = NULL,
+  value_col,
+  region_col = "region",
+  agg_type = c("weighted_mean", "sum")
+) {
+  
+
+  # --- CRS alignment ---
+  if (st_crs(pred_sf) != st_crs(regions_sf)) {
+    regions_sf <- st_transform(regions_sf, st_crs(pred_sf))
+  }
+  
+  # --- spatial join ---
+  
+  joined <- st_join(pred_sf, regions_sf[, region_col], left = FALSE)
+  
+  if (nrow(joined) == 0) {
+    stop("No prediction points fall inside regions.")
+  }
+  
+  # --- population extraction if needed ---
+  if (agg_type == "weighted_mean") {
+    
+    if (is.null(cam_pop)) {
+      stop("cam_pop raster required for weighted_mean aggregation")
+    }
+    
+    joined$population <- terra::extract(
+      cam_pop,
+      terra::vect(joined))[,2]
+    
+    # remove missing population
+    joined <- joined[!is.na(joined$population) & joined$population > 0, ]
+    
+    # --- weighted aggregation ---
+    out <- joined %>%
+      dplyr::group_by(.data[[region_col]]) %>%
+      dplyr::summarise(
+        value_weighted = weighted.mean(
+          .data[[value_col]],
+          population,
+          na.rm = TRUE
+        ),
+        value_unweighted = mean(.data[[value_col]], na.rm = TRUE),
+        total_population = sum(population, na.rm = TRUE),
+        n_points = dplyr::n(),
+        .groups = "drop"
+      )
+    
+  } else {
+    
+    # --- sum aggregation (for infections) ---
+    out <- joined %>%
+      dplyr::group_by(.data[[region_col]]) %>%
+      dplyr::summarise(
+        total_value = sum(.data[[value_col]], na.rm = TRUE),
+        n_points = dplyr::n(),
+        .groups = "drop"
+      )
+  }
+  
+  return(out)
+}
+
+
+
+
+
+
+
+
+
 # --- prop positive using multisero model probabilites 
 calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, infM, pathogen_col,
                                        breaks_max, breaks_min) {
@@ -737,14 +823,20 @@ calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df,
 
   # --- Track original row indices so we index into chains_df correctly
   data_plot <- data %>%
-    mutate(original_row = row_number()) %>%
     filter(!is.na(.data[[var_col]]))
-  kept_indices <- data_plot$original_row 
-  #kept_indices <- data_plot$model_row_id
+  #kept_indices <- data_plot$original_row 
+  kept_indices <- data_plot$id
+
 
   # --- Sum posterior probabilities across positive components for every draw
   prob_cols_list <- lapply(positive_components, function(comp) {
-    sprintf("post_prob[%d,%d]", kept_indices, comp)
+    cols <- sprintf("post_prob[%d,%d]", kept_indices, comp)
+ 
+    missing_cols <- setdiff(cols, colnames(chains_df))
+    
+    if (length(missing_cols) > 0) {
+    stop("Missing posterior columns: ", paste(head(missing_cols), collapse = ", "))
+    }
   })
 
   probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
@@ -797,3 +889,131 @@ calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df,
 
 
 
+NEW_calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, infM, pathogen_col, breaks_max, breaks_min) {
+  
+  positive_components <- which(infM[, pathogen_col] == 1)
+  
+  data_plot <- data %>%
+    filter(!is.na(.data[[var_col]]), !is.na(stan_idx_full_model))
+  
+  kept_indices <- data_plot$stan_idx_full_model  # <-- use this, not $id
+  
+  nrow(data_plot)
+
+  prob_cols_list <- lapply(positive_components, function(comp) {
+    cols <- sprintf("post_prob[%d,%d]", kept_indices, comp)
+    missing_cols <- setdiff(cols, colnames(chains_df))
+    if (length(missing_cols) > 0) {
+      stop("Missing posterior columns: ", paste(head(missing_cols), collapse = ", "))
+    }
+    cols
+  })
+  
+  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
+    as.matrix(chains_df[, cols])
+  }))
+
+
+  n_draws <- nrow(probs_all_draws)
+
+  # --- Bin individuals by the continuous variable
+  bin_indices <- lapply(seq_along(breaks_max), function(i) {
+    which(data_plot[[var_col]] >= breaks_min[i] & data_plot[[var_col]] < breaks_max[i])
+  })
+
+  # --- For each draw, compute mean probability in each bin
+  prevalence_draws <- map_dfr(1:n_draws, function(draw_num) {
+    probs_this_draw <- probs_all_draws[draw_num, ]
+
+    map_dfr(seq_along(breaks_max), function(i) {
+      idx <- bin_indices[[i]]
+      if (length(idx) <= 5) return(NULL)          # same minimum-n guard as before
+
+      tibble(
+        bin         = i,
+        var_mid     = mean(data_plot[[var_col]][idx], na.rm = TRUE),
+        prevalence  = mean(probs_this_draw[idx],     na.rm = TRUE),
+        n           = length(idx),
+        draw        = draw_num
+      )
+    })
+  })
+
+  # --- Summarise across draws: median + 95 % credible interval
+  obs <- prevalence_draws %>%
+    group_by(bin, var_mid, n) %>%
+    dplyr::summarise(
+      y    = median(prevalence),
+      ymin = quantile(prevalence, 0.025),
+      ymax = quantile(prevalence, 0.975),
+      .groups = "drop"
+    ) %>%
+    dplyr::select(x = var_mid, y, ymin, ymax)           # match original output columns
+ 
+
+    # posterior mean per individual
+    posterior_mean_probs <- colMeans(probs_all_draws)
+
+    
+
+  return(obs)
+}
+ 
+
+district_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, infM, pathogen_col) {
+  
+  positive_components <- which(infM[, pathogen_col] == 1)
+  
+  data_plot <- data %>%
+    filter(!is.na(.data[[var_col]]), !is.na(stan_idx_full_model))
+  
+  kept_indices <- data_plot$stan_idx_full_model
+  
+  prob_cols_list <- lapply(positive_components, function(comp) {
+    cols <- sprintf("post_prob[%d,%d]", kept_indices, comp)
+    missing_cols <- setdiff(cols, colnames(chains_df))
+    if (length(missing_cols) > 0) {
+      stop("Missing posterior columns: ", paste(head(missing_cols), collapse = ", "))
+    }
+    cols
+  })
+  
+  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
+    as.matrix(chains_df[, cols])
+  }))
+  
+  n_draws <- nrow(probs_all_draws)
+  
+  # --- For each draw, aggregate to district level
+  prevalence_draws <- map_dfr(1:n_draws, function(draw_num) {
+    probs_this_draw <- probs_all_draws[draw_num, ]
+    
+    data_plot %>%
+      mutate(prob = probs_this_draw) %>%
+      group_by(district_lower) %>%
+      summarise(
+        var_mean     = mean(.data[[var_col]], na.rm = TRUE),
+        prevalence   = mean(prob, na.rm = TRUE),
+        n            = n(),
+        draw         = draw_num,
+        .groups      = "drop"
+      ) %>%
+      filter(n > 5)
+  })
+  
+  # --- Summarise across draws per district
+  obs <- prevalence_draws %>%
+    group_by(district_lower, var_mean, n) %>%
+    dplyr::summarise(
+      y    = median(prevalence),
+      ymin = quantile(prevalence, 0.025),
+      ymax = quantile(prevalence, 0.975),
+      .groups = "drop"
+    ) %>%
+    dplyr::select(district = district_lower, x = var_mean, y, ymin, ymax)
+  
+  # --- District-level Spearman correlation
+  print(cor(obs$x, obs$y, method = "spearman"))
+  
+  return(obs)
+}

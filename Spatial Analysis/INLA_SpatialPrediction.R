@@ -97,7 +97,8 @@ nrow(model_data)
 
 sum(is.na(model_data$AgeInYears))
 sum(model_data$AgeInYears == 0, na.rm = TRUE)
-colnames(model_data)
+sum(is.na(model_data$Easting) & !is.na(model_data$Northing))
+sum(is.na(model_data$ONNV_pos))
 
 # --- Run INLA model for ONNV (with historic year of intro 1900)
 # --- Use population raster for prediction grid
@@ -114,7 +115,7 @@ saveRDS(onnv_results_pop_grid, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/Fin
 # --- ESTIMATED LOCATION CALCULATIONS BY REGION ----
 index_est <- inla.stack.index(onnv_results_pop_grid$stk.full, tag = "est")$data
 index_pred <- inla.stack.index(onnv_results_pop_grid$stk.full, tag = "pred")$data
-
+length(index_est)
 
 # Extract the intercept
 eta_est <- onnv_results_pop_grid$output$summary.linear.predictor[index_est, "mean"]
@@ -173,7 +174,6 @@ min(region_lambda$lambda_weighted)
 
 
 # --- SPATIAL PREDICTIONS: # Overall cameroon estimates ---- 
-
 # overall FOI
 foi_summary <- onnv_results_pop_grid$output$summary.fixed
 est_cameroonwide_foi <- list(
@@ -260,8 +260,6 @@ cat(sprintf(
 
 
 # --- Cameroon wide maps 
-source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
-
 foi_onnv <- plot_predicted_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
 range(foi_onnv$foi_df$foi)
 
@@ -307,3 +305,38 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4b.png",
 
 
 
+# --- Cameroon Wide prediction, aggregated by region 
+
+cameroon_regions <- ne_states(country = "Cameroon", returnclass = "sf")
+# rename 'name' to region
+regions_sf <- cameroon_regions %>%
+  dplyr::select(region = name) %>%   # standardise column name
+  st_make_valid()
+
+cam_pop_agg <- terra::aggregate(cam_pop, fact = 10, fun = sum, na.rm = TRUE)
+
+foi_region <- aggregate_predictions_by_region(
+  pred_sf   = foi_onnv$foi_sf,
+  regions_sf = regions_sf,
+  cam_pop   = cam_pop_agg,
+  value_col = "foi",
+  agg_type  = "weighted_mean"
+)
+print(foi_region)
+
+prev_region <- aggregate_predictions_by_region(
+  pred_sf    = sero_onnv$prev_sf,
+  regions_sf = regions_sf,
+  cam_pop    = cam_pop_agg,
+  value_col  = "prev",
+  agg_type   = "weighted_mean"
+)
+print(prev_region)
+
+infection_region <- aggregate_predictions_by_region(
+  pred_sf    = infections_onnv$infections_sf,
+  regions_sf = regions_sf,
+  value_col  = "infections",
+  agg_type   = "sum"
+)
+print(infection_region)
