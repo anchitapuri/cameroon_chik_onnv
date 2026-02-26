@@ -553,11 +553,12 @@ plot_age_seroprevalence <- function(data, chains_df, infM, pathogen_col, pathoge
 plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_df, infM, pathogen_col) {
   
   # Recreate the filtered dataset used in the model
-  data_plot                   <- subset(data, !is.na(Latitude) & !is.na(Longitude))
-  data_plot$year_of_survey    <- as.numeric(substr(data_plot$Sample, 1, 4))
-  data_plot$age_intro         <- data_plot$year_of_survey - year_intro
+  data_plot <- data
+
+# Only add derived variables (do NOT refilter rows)
+  data_plot$year_of_survey <- as.numeric(substr(data_plot$Sample, 1, 4))
+  data_plot$age_intro <- data_plot$year_of_survey - year_intro
   data_plot$years_of_exposure <- pmin(data_plot$age_intro, data_plot$AgeInYears)
-  data_plot <- subset(data_plot, !is.na(years_of_exposure) & years_of_exposure > 0)
 
   # Keep the id for proper alignment
   kept_ids <- data_plot$id
@@ -582,6 +583,9 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
   fit     <- result$output$summary.fitted.values[
     idx_est, c("mean", "0.025quant", "0.975quant")
   ]
+
+  head(stack_data$id[idx_est])
+  head(data_plot$id)
   
   
   # Attach INLA predicted probabilities to each individual
@@ -600,6 +604,12 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
   prob_cols_list <- lapply(positive_components, function(comp) {
     sprintf("post_prob[%d,%d]", match(kept_ids, meta_data_full_model$id), comp)
   })
+
+  matched_idx <- match(kept_ids, meta_data_full_model$id)
+  cat("Any NA in posterior match:", any(is.na(matched_idx)), "\n")
+
+  print(head(data_plot$id))
+  print(head(meta_data_full_model$id[matched_idx]))
   
   # Get the indices we're keeping (after all filtering)
   #kept_indices <- data_plot$original_row
@@ -641,9 +651,6 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
       n = first(n),
       .groups = "drop"
     )
-
-  cat("Obs summary rows:", nrow(obs), "\n")
-  print(head(obs))
   
   # ---- Predicted summaries (mean of INLA predicted probabilities) ----
   pred <- aggregate(
@@ -652,8 +659,7 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
     mean,
     na.rm = TRUE
   )
-  print(head(pred))
-  
+ 
   # ---- Plot ----
   p <- ggplot() +
     # observed (from posterior probabilities)
@@ -809,87 +815,7 @@ aggregate_predictions_by_region <- function(
 
 
 
-
-
-
-
-
-# --- prop positive using multisero model probabilites 
-calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, infM, pathogen_col,
-                                       breaks_max, breaks_min) {
-
-  # --- Identify which mixture components are "positive" for this pathogen
-  positive_components <- which(infM[, pathogen_col] == 1)
-
-  # --- Track original row indices so we index into chains_df correctly
-  data_plot <- data %>%
-    filter(!is.na(.data[[var_col]]))
-  #kept_indices <- data_plot$original_row 
-  kept_indices <- data_plot$id
-
-
-  # --- Sum posterior probabilities across positive components for every draw
-  prob_cols_list <- lapply(positive_components, function(comp) {
-    cols <- sprintf("post_prob[%d,%d]", kept_indices, comp)
- 
-    missing_cols <- setdiff(cols, colnames(chains_df))
-    
-    if (length(missing_cols) > 0) {
-    stop("Missing posterior columns: ", paste(head(missing_cols), collapse = ", "))
-    }
-  })
-
-  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
-    as.matrix(chains_df[, cols])
-  }))                                        # rows = draws, cols = individuals
-
-  n_draws <- nrow(probs_all_draws)
-
-  # --- Bin individuals by the continuous variable
-  bin_indices <- lapply(seq_along(breaks_max), function(i) {
-    which(data_plot[[var_col]] >= breaks_min[i] & data_plot[[var_col]] < breaks_max[i])
-  })
-
-  # --- For each draw, compute mean probability in each bin
-  prevalence_draws <- map_dfr(1:n_draws, function(draw_num) {
-    probs_this_draw <- probs_all_draws[draw_num, ]
-
-    map_dfr(seq_along(breaks_max), function(i) {
-      idx <- bin_indices[[i]]
-      if (length(idx) <= 5) return(NULL)          # same minimum-n guard as before
-
-      tibble(
-        bin         = i,
-        var_mid     = mean(data_plot[[var_col]][idx], na.rm = TRUE),
-        prevalence  = mean(probs_this_draw[idx],     na.rm = TRUE),
-        n           = length(idx),
-        draw        = draw_num
-      )
-    })
-  })
-
-  # --- Summarise across draws: median + 95 % credible interval
-  obs <- prevalence_draws %>%
-    group_by(bin, var_mid, n) %>%
-    dplyr::summarise(
-      y    = median(prevalence),
-      ymin = quantile(prevalence, 0.025),
-      ymax = quantile(prevalence, 0.975),
-      .groups = "drop"
-    ) %>%
-    dplyr::select(x = var_mid, y, ymin, ymax)           # match original output columns
- 
-
-    # posterior mean per individual
-    posterior_mean_probs <- colMeans(probs_all_draws)
-  print(cor(data_plot[[var_col]], posterior_mean_probs))
-
-  return(obs)
-}
-
-
-
-NEW_calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, infM, pathogen_col, breaks_max, breaks_min) {
+calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, infM, pathogen_col, breaks_max, breaks_min) {
   
   positive_components <- which(infM[, pathogen_col] == 1)
   
@@ -954,11 +880,29 @@ NEW_calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains
     # posterior mean per individual
     posterior_mean_probs <- colMeans(probs_all_draws)
 
-    
 
-  return(obs)
+    #logistic regression 
+    model_df <- data_plot %>%
+    mutate(prob_positive = posterior_mean_probs)
+
+    formula <- as.formula(paste("prob_positive ~", var_col))
+
+    log_model <- glm(
+      formula,
+      family = quasibinomial,
+      data = model_df
+    )
+
+    model_df$logit_pred <- predict(log_model, type = "response")
+
+
+  return(list( obs = obs,
+  model_df = model_df,
+  log_model = log_model))
 }
  
+
+
 
 district_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, infM, pathogen_col) {
   

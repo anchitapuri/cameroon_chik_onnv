@@ -29,6 +29,10 @@ cam_shapefile_districts_merged <- readRDS("/Users/ap2488/Desktop/Cameroon_Analys
 meta_data_with_labels <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv')
 nrow(meta_data_with_labels)
 
+
+nrow(meta_data_with_labels)
+nrow(onnv_results_pop_grid$data_filtered)
+
 # --- Plot age seroprevalence model fits
 # prepare data for stan
 age_prev_model_fits <- plot_age_seroprevalence_model_fits(
@@ -40,6 +44,12 @@ age_prev_model_fits <- plot_age_seroprevalence_model_fits(
   pathogen_col = "a" # a == ONNV 
 )
 print(age_prev_model_fits)
+
+stack_data <- inla.stack.data(onnv_results_pop_grid$stk.full)
+idx_est <- inla.stack.index(onnv_results_pop_grid$stk.full, tag = "est")$data
+
+head(stack_data$id[idx_est])
+head(data_plot$id)
 
 
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig3.png", 
@@ -152,140 +162,18 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4a.png",
 
 
 
-# --- Proportion positive by mosquito distributions (only ONNV) 
+# --- Proportion positive by mosquito distributions (only ONNV) (using multisero probs)
 # Anopheles bins (adjust if needed based on your data range
 anoph_max <- seq(0, 1, 0.1)
 anoph_min <- anoph_max - 0.5
 anoph_min[which(anoph_min < 0)] <- 0
-
-
-df_fun_old <- calculate_prop_by_variable(
-  data = onnv_results_pop_grid$data_filtered, 
-  var_col = "fun_pw_district", 
-  positive_col = "ONNV_pos",
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
-df_fun_old$species <- "Funestus"
-cor(df_fun_old$x, df_fun_old$y, use = "complete.obs")
-
-# Gambiae
-df_gam_old <- calculate_prop_by_variable(
-  data = onnv_results_pop_grid$data_filtered, 
-  var_col = "gam_pw_district", 
-  positive_col = "ONNV_pos",
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
-df_gam_old$species <- "Gambiae"
-cor(df_gam_old$x, df_gam_old$y, use = "complete.obs", method = "pearson")
-
-
-# Funestus plot
-prop_fun_prev_old <- ggplot(df_fun_old, aes(x = x, y = y)) +
-  geom_point(color = "#c1518b", size = 5) +
-  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
-  scale_x_continuous(limits = c(0, 1)) +
-  scale_y_continuous(limits = c(0, 0.35), breaks = seq(0, 0.35, 0.05)) +
-  labs(x = "Proportion Anopheles funestus", y = "Proportion ONNV positive") +
-  theme_classic() + 
-  theme(panel.grid = element_blank(),
-    aspect.ratio = 0.75,
-    axis.line = element_line(color = "black", linewidth = 0.7),  # Add x and y axis lines
-    axis.title.x = element_text(size = 24),                             # X-axis label
-    axis.title.y = element_text(size = 24),                             # Y-axis label
-    axis.text.x = element_text(size = 20),                              # X-axis tick labels
-    axis.text.y = element_text(size = 20),                              # Y-axis tick labels
-    legend.title = element_text(size = 20),                             # Legend title
-    legend.text = element_text(size = 20),                               # Legend text
-    axis.ticks.x = element_line(color = "black", size = 0.5),  # X-axis ticks only
-    axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
-    axis.ticks.length = unit(0.2, "cm")
-
-  )
-
-# Gambiae plot
-prop_gam_prev_old <- ggplot(df_gam_old, aes(x = x, y = y)) +
-  geom_point(color = "#165262", size = 5) +
-  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#165262") +
-  scale_x_continuous(limits = c(0, 1)) +
-  scale_y_continuous(limits = c(0, 0.35), breaks = seq(0, 0.35, 0.05))+
-  labs(x = "Proportion Anopheles gambiae", y = "Proportion ONNV positive") +
-  theme_classic() + 
-  theme(
-    panel.grid = element_blank(),
-    aspect.ratio = 0.75,
-    axis.line = element_line(color = "black", linewidth = 0.7),  # Add x and y axis lines
-    axis.title.x = element_text(size = 24),                             # X-axis label
-    axis.title.y = element_text(size = 24),                             # Y-axis label
-    axis.text.x = element_text(size = 20),                              # X-axis tick labels
-    axis.text.y = element_text(size = 20),                              # Y-axis tick labels
-    legend.title = element_text(size = 20),                             # Legend title
-    legend.text = element_text(size = 20),                               # Legend text
-    axis.ticks.x = element_line(color = "black", size = 0.5),  # X-axis ticks only
-    axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
-    axis.ticks.length = unit(0.2, "cm")
-  )
-print(prop_gam_prev_old)
-# Combined plot
-combined_mosquito_plots_old <- prop_fun_prev_old + prop_gam_prev_old
-print(combined_mosquito_plots_old)
-
-
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c.png", 
-       plot = combined_mosquito_plots,
-       width = 10, 
-       height = 10, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
-
-
-
-
-
-# --- USING MULTISERO MODEL PROBABILITIES
-# Anopheles bins (adjust if needed based on your data range
-preprocessed_data$data$y$model_row_id <- 1:nrow(preprocessed_data$data$y)
-data_filtered <- preprocessed_data$data$y %>%
-  filter(!is.na(AgeInYears) & age != 0)
-head(preprocessed_data$data$y)
-
-nrow(onnv_results_pop_grid$data_filtered)
-nrow(preprocessed_data$data$y)
-
-head(onnv_results_pop_grid$data_filtered$model_row_id)
-head(colnames(chains_df)[grep("post_prob", colnames(chains_df))][1:10])
-
-
-
-# Log CHIK, ONNV and MAY
-cols_to_log <- c("CHIKV_sE2", "MAYV_E2", "ONNV_VLP")
-new_cols_names <- paste0(cols_to_log, "_log")
-
-onnv_results_pop_grid$data_filtered[new_cols_names] <- lapply(onnv_results_pop_grid$data_filtered[cols_to_log], log)
-
-all.equal(
-  preprocessed_data$data$y$ONNV_VLP_log,
-  onnv_results_pop_grid$data_filtered$ONNV_VLP_log
-)
-
-
-
-anoph_max <- seq(0, 1, 0.1)
-anoph_min <- anoph_max - 0.5
-anoph_min[which(anoph_min < 0)] <- 0
-
-
-
-head(meta_data_with_labels)
-table(is.na(meta_data_with_labels$stan_idx_full_model))
-max(meta_data_with_labels$stan_idx_full_model, na.rm = TRUE)  # should equal N in Stan
 
 # How many individuals per bin?
 table(cut(meta_data_with_labels$fun_pw_district, 
           breaks = unique(c(anoph_min, anoph_max)), 
           include.lowest = TRUE))
 
-df_fun <- NEW_calculate_prop_by_variable_multisero_probs(
+df_fun <- calculate_prop_by_variable_multisero_probs(
   data = meta_data_with_labels,
   var_col = "fun_pw_district", 
   chains_df = chains_df,
@@ -293,29 +181,34 @@ df_fun <- NEW_calculate_prop_by_variable_multisero_probs(
   pathogen_col = 'a', # a = ONNV
   breaks_max = anoph_max, 
   breaks_min = anoph_min)
-df_fun$species <- "Funestus"
+df_fun$log_model
+
 cor(df_fun$x, df_fun$y, use = "complete.obs", method = "spearman")
 
 
 # Gambiae
-df_gam <- NEW_calculate_prop_by_variable_multisero_probs(
-  data =meta_data_with_labels, 
+df_gam <- calculate_prop_by_variable_multisero_probs(
+  data = meta_data_with_labels, 
   var_col = "gam_pw_district", 
   chains_df = chains_df,
   infM = preprocessed_data$data$infM,
   pathogen_col = 'a',  # a = ONNV
   breaks_max = anoph_max, 
   breaks_min = anoph_min)
+
+df_obs_gam <- df_gam$obs
+regression_gam <- df_gam$model_df
+df_gam$log_model
+
 df_gam$species <- "Gambiae"
 cor(df_gam$x, df_gam$y, use = "complete.obs", method = "spearman")
-
 
 
 
 # --- Plots 
 # Funestus plot
 prop_fun_prev <- ggplot(df_fun, aes(x = x, y = y)) +
-  geom_point(color = "#c1518b", size = 5) +
+  geom_point(color = "#023e8a", size = 5) +
   geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
   scale_x_continuous(limits = c(0, 1)) +
   #scale_y_continuous(limits = c(0.10, 0.30), breaks = seq(0, 0.35, 0.05)) +
@@ -337,9 +230,11 @@ prop_fun_prev <- ggplot(df_fun, aes(x = x, y = y)) +
 
   )
 print(prop_fun_prev)
+
+
 # Gambiae plot
-prop_gam_prev <- ggplot(df_gam, aes(x = x, y = y)) +
-  geom_point(color = "#165262", size = 5) +
+prop_gam_prev <- ggplot(df_obs_gam, aes(x = x, y = y)) +
+  geom_point(color = "#165262", size = 5)  +
   geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#165262") +
   scale_x_continuous(limits = c(0, 1)) +
   #scale_y_continuous(limits = c(0.10, 0.25), breaks = seq(0, 0.35, 0.05)) +
@@ -360,6 +255,8 @@ prop_gam_prev <- ggplot(df_gam, aes(x = x, y = y)) +
     axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
     axis.ticks.length = unit(0.2, "cm")
   )
+print(prop_gam_prev)
+
 
 (prop_fun_prev + prop_gam_prev)
 combined_mosquito_plots_new <- (prop_fun_prev + prop_gam_prev)
@@ -390,7 +287,7 @@ aegmin <- aegmax - 0.5
 aegmin[which(aegmin<0)] <- 0
 
 # Aegypti
-df_aegypti <- NEW_calculate_prop_by_variable_multisero_probs(
+df_aegypti <- calculate_prop_by_variable_multisero_probs(
   data = meta_data_with_labels,
   var_col = "aeg_pw_district", 
   chains_df = chains_df,
@@ -398,10 +295,11 @@ df_aegypti <- NEW_calculate_prop_by_variable_multisero_probs(
   pathogen_col = 'a',  # a = ONNV
   breaks_max = aegmax, 
   breaks_min = aegmin)
-df_aegypti$species <- "Aegypti"
-cor(df_aegypti$x, df_aegypti$y, use = "complete.obs", method = "pearson")
 
-ggplot(df_aegypti, aes(x = x, y = y)) +
+df_obs_aeg <- df_aegypti$obs
+df_aegypti$log_model
+
+prop_aeg_prev <- ggplot(df_obs_aeg, aes(x = x, y = y)) +
   geom_point(color = "#c1518b", size = 5) +
   geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
   scale_x_continuous(limits = c(0, 1)) +
@@ -425,7 +323,7 @@ ggplot(df_aegypti, aes(x = x, y = y)) +
 
 
 # Albopictus
-df_albopictus <- NEW_calculate_prop_by_variable_multisero_probs(
+df_albopictus <- calculate_prop_by_variable_multisero_probs(
   data = meta_data_with_labels,
   var_col = "alb_pw_district", 
   chains_df = chains_df,
@@ -433,11 +331,12 @@ df_albopictus <- NEW_calculate_prop_by_variable_multisero_probs(
   pathogen_col = 'a',  # a = ONNV
   breaks_max = aegmax, 
   breaks_min = aegmin)
-df_albopictus$species <- "Albopictus"
-cor(df_albopictus$x, df_albopictus$y, use = "complete.obs", method = "pearson")
+
+df_obs_albo <- df_albopictus$obs
+df_albopictus$log_model
 
 
-ggplot(df_albopictus, aes(x = x, y = y)) +
+prop_albo_prev <- ggplot(df_obs_albo, aes(x = x, y = y)) +
   geom_point(color = "#c1518b", size = 5) +
   geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
   scale_x_continuous(limits = c(0, 1)) +
@@ -460,34 +359,170 @@ ggplot(df_albopictus, aes(x = x, y = y)) +
   )
 
 
+# supplementary figrue 
+anopheles_and_aedes_onnv <- (prop_fun_prev + prop_gam_prev) / (prop_aeg_prev + prop_albo_prev)
+print(anopheles_and_aedes_onnv)
 
 
-# --- Aedes with CHIK 
+
+
+
+
+# ---  CHIK 
+df_fun_chik <- calculate_prop_by_variable_multisero_probs(
+  data = meta_data_with_labels,
+  var_col = "fun_pw_district", 
+  chains_df = chains_df,
+  infM = preprocessed_data$data$infM,
+  pathogen_col = 'b', # b = CHIK
+  breaks_max = anoph_max, 
+  breaks_min = anoph_min)
+df_fun$log_model
+
+
+
+# Gambiae
+df_gam_chik <- calculate_prop_by_variable_multisero_probs(
+  data = meta_data_with_labels, 
+  var_col = "gam_pw_district", 
+  chains_df = chains_df,
+  infM = preprocessed_data$data$infM,
+  pathogen_col = 'b',  # b = CHIK
+  breaks_max = anoph_max, 
+  breaks_min = anoph_min)
+
+
+# --- Plots 
+# Funestus plot
+chik_prop_fun_prev <- ggplot(df_fun_chik$obs, aes(x = x, y = y)) +
+  geom_point(color = "#023e8a", size = 5) +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#023e8a") +
+  scale_x_continuous(limits = c(0, 1)) +
+  #scale_y_continuous(limits = c(0.10, 0.30), breaks = seq(0, 0.35, 0.05)) +
+  scale_y_continuous(limits = c(NA, NA), breaks = seq(0, 0.35, 0.05)) +
+  labs(x = "Proportion Anopheles funestus", y = "Proportion CHIK positive") +
+  theme_classic() + 
+  theme(panel.grid = element_blank(),
+    aspect.ratio = 0.75,
+    axis.line = element_line(color = "black", linewidth = 0.7),  # Add x and y axis lines
+    axis.title.x = element_text(size = 24),                             # X-axis label
+    axis.title.y = element_text(size = 24),                             # Y-axis label
+    axis.text.x = element_text(size = 20),                              # X-axis tick labels
+    axis.text.y = element_text(size = 20),                              # Y-axis tick labels
+    legend.title = element_text(size = 20),                             # Legend title
+    legend.text = element_text(size = 20),                               # Legend text
+    axis.ticks.x = element_line(color = "black", size = 0.5),  # X-axis ticks only
+    axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
+    axis.ticks.length = unit(0.2, "cm")
+
+  )
+print(chik_prop_fun_prev)
+
+
+# Gambiae plot
+chik_prop_gam_prev <- ggplot(df_gam_chik$obs, aes(x = x, y = y)) +
+  geom_point(color = "#165262", size = 5)  +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#165262") +
+  scale_x_continuous(limits = c(0, 1)) +
+  #scale_y_continuous(limits = c(0.10, 0.25), breaks = seq(0, 0.35, 0.05)) +
+  scale_y_continuous(limits = c(NA, NA), breaks = seq(0, 0.35, 0.05))+
+  labs(x = "Proportion Anopheles gambiae", y = "Proportion CHIK positive") +
+  theme_classic() + 
+  theme(
+    panel.grid = element_blank(),
+    aspect.ratio = 0.75,
+    axis.line = element_line(color = "black", linewidth = 0.7),  # Add x and y axis lines
+    axis.title.x = element_text(size = 24),                             # X-axis label
+    axis.title.y = element_text(size = 24),                             # Y-axis label
+    axis.text.x = element_text(size = 20),                              # X-axis tick labels
+    axis.text.y = element_text(size = 20),                              # Y-axis tick labels
+    legend.title = element_text(size = 20),                             # Legend title
+    legend.text = element_text(size = 20),                               # Legend text
+    axis.ticks.x = element_line(color = "black", size = 0.5),  # X-axis ticks only
+    axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
+    axis.ticks.length = unit(0.2, "cm")
+  )
+print(chik_prop_gam_prev)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Aegypti
 df_aegypti_chik <- calculate_prop_by_variable_multisero_probs(
-  data = onnv_results_pop_grid$data_filtered, 
+  data = meta_data_with_labels, 
   var_col = "aeg_pw_district", 
   chains_df = chains_df,
   infM = preprocessed_data$data$infM,
   pathogen_col = 'b',  # b = CHIK 
   breaks_max = aegmax, 
   breaks_min = aegmin)
-df_aegypti_chik$species <- "Aegypti"
-cor(df_aegypti_chik$x, df_aegypti_chik$y, use = "complete.obs", method = "pearson")
+
+chik_prop_aeg_prev <- ggplot(df_aegypti_chik$obs, aes(x = x, y = y)) +
+  geom_point(color = "#c1518b", size = 5) +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
+  scale_x_continuous(limits = c(0, 1)) +
+  #scale_y_continuous(limits = c(0, 0.35), breaks = seq(0, 0.35, 0.05)) +
+  scale_y_continuous(limits = c(NA, NA), breaks = seq(0, 0.35, 0.05))+
+  labs(x = "Proportion Aedes Aegypti", y = "Proportion CHIK positive") +
+  theme_classic() + 
+  theme(panel.grid = element_blank(),
+    aspect.ratio = 0.75,
+    axis.line = element_line(color = "black", linewidth = 0.7),  # Add x and y axis lines
+    axis.title.x = element_text(size = 24),                             # X-axis label
+    axis.title.y = element_text(size = 24),                             # Y-axis label
+    axis.text.x = element_text(size = 20),                              # X-axis tick labels
+    axis.text.y = element_text(size = 20),                              # Y-axis tick labels
+    legend.title = element_text(size = 20),                             # Legend title
+    legend.text = element_text(size = 20),                               # Legend text
+    axis.ticks.x = element_line(color = "black", size = 0.5),  # X-axis ticks only
+    axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
+    axis.ticks.length = unit(0.2, "cm")
+  )
 
 
 # Albopictus
 df_albopictus_chik <- calculate_prop_by_variable_multisero_probs(
-  data = onnv_results_pop_grid$data_filtered, 
+  data = meta_data_with_labels, 
   var_col = "alb_pw_district", 
   chains_df = chains_df,
   infM = preprocessed_data$data$infM,
   pathogen_col = 'b',  # b = CHIK 
   breaks_max = aegmax, 
   breaks_min = aegmin)
-df_albopictus_chik$species <- "Albopictus"
-cor(df_albopictus_chik$x, df_albopictus_chik$y, use = "complete.obs", method = "pearson")
 
+chik_prop_albo_prev <- ggplot(df_albopictus_chik$obs, aes(x = x, y = y)) +
+  geom_point(color = "#c1518b", size = 5) +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
+  scale_x_continuous(limits = c(0, 1)) +
+  #scale_y_continuous(limits = c(0, 0.35), breaks = seq(0, 0.35, 0.05)) +
+  scale_y_continuous(limits = c(NA, NA), breaks = seq(0, 0.35, 0.05))+
+  labs(x = "Proportion Aedes Albopictus", y = "Proportion CHIK positive") +
+  theme_classic() + 
+  theme(panel.grid = element_blank(),
+    aspect.ratio = 0.75,
+    axis.line = element_line(color = "black", linewidth = 0.7),  # Add x and y axis lines
+    axis.title.x = element_text(size = 24),                             # X-axis label
+    axis.title.y = element_text(size = 24),                             # Y-axis label
+    axis.text.x = element_text(size = 20),                              # X-axis tick labels
+    axis.text.y = element_text(size = 20),                              # Y-axis tick labels
+    legend.title = element_text(size = 20),                             # Legend title
+    legend.text = element_text(size = 20),                               # Legend text
+    axis.ticks.x = element_line(color = "black", size = 0.5),  # X-axis ticks only
+    axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
+    axis.ticks.length = unit(0.2, "cm")
+  )
 
 
 

@@ -288,9 +288,21 @@ write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fin
 chains_onnv_only <- fit_onnv_only_model$draws(format='df')
 chains_df_onnv_only <- as.data.frame(chains_onnv_only)
 
+# Model 2 
 sero_onnv_only <- extract_sero(chains_df_onnv_only, preprocessed_data_onnv_only_model$data, 
-pathogens=preprocessed_data_full_model$pathogens)
+pathogens=preprocessed_data_onnv_only_model$pathogens)
+print(sero_onnv_only)
+
+mu_onnv_only <- extract_mu(chains_df_onnv_only, preprocessed_data_onnv_only_model$data, pathogens=preprocessed_data_onnv_only_model$pathogens)
+print(mu_onnv_only)
+
+phi_onnv_only <- extract_phi(chains_df_onnv_only, preprocessed_data_onnv_only_model$data, pathogens=preprocessed_data_onnv_only_model$pathogens)
+print(phi_onnv_only)
+
+# Model 1 
 print(sero)
+print(mu)
+print(phi)
 
 
 
