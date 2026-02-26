@@ -44,7 +44,7 @@ albopictus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Aedes_maps_publ
 anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_funestus_CMR.tiff')
 anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_gambiae_ss_CMR.tiff')
 
-plot(albopictus)
+
 
 # Load population by gender / age data 
 cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/CameroonAge2025.csv')
@@ -503,7 +503,7 @@ sf_meta_data_with_coords_pw[duplicated(sf_meta_data_with_coords_pw$id) | duplica
 
 sf_meta_data_with_coords_pw_filtered <- sf_meta_data_with_coords_pw |>
   distinct(id, .keep_all = TRUE)
-
+nrow(sf_meta_data_with_coords_pw_filtered)
 
 # Verify
 nrow(sf_meta_data_with_coords_pw_filtered)  # should be 6324
@@ -518,7 +518,6 @@ preprocessed_meta_data_without_coords <- sf_meta_data_with_coords_pw_filtered %>
 write.csv(preprocessed_meta_data_without_coords, 
           '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv', 
           row.names = FALSE)
-
 
 
 # --- Figure 1: Visualising the metadata 

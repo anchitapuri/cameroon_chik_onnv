@@ -197,23 +197,33 @@ df_gam <- calculate_prop_by_variable_multisero_probs(
   breaks_min = anoph_min)
 
 df_obs_gam <- df_gam$obs
-regression_gam <- df_gam$model_df
-df_gam$log_model
 
-df_gam$species <- "Gambiae"
-cor(df_gam$x, df_gam$y, use = "complete.obs", method = "spearman")
 
+
+# supplementary figure 
+# plot label 
+make_label <- function(model, pathogen, vector) {
+  beta <- round(coef(model)[2], 3)
+  ci   <- round(confint(model)[2, ], 3)
+  df$strip_label <- paste0(β = ", beta",
+                           " (", ci[1], ", ", ci[2], ")")
+}
+
+
+label_fun  <- make_label(df_fun$log_model,   "ONNV", "An. funestus")
+label_gam  <- make_label(df_gam$log_model,    "ONNV", "An. gambiae")
 
 
 # --- Plots 
 # Funestus plot
-prop_fun_prev <- ggplot(df_fun, aes(x = x, y = y)) +
+prop_fun_prev <- ggplot(df_fun$obs, aes(x = x, y = y)) +
   geom_point(color = "#023e8a", size = 5) +
   geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
   scale_x_continuous(limits = c(0, 1)) +
   #scale_y_continuous(limits = c(0.10, 0.30), breaks = seq(0, 0.35, 0.05)) +
   scale_y_continuous(limits = c(NA, NA), breaks = seq(0, 0.35, 0.05)) +
-  labs(x = "Proportion Anopheles funestus", y = "Proportion ONNV positive") +
+  labs(x = "Proportion Anopheles funestus", y = "Proportion ONNV positive",
+  title = label_fun) +
   theme_classic() + 
   theme(panel.grid = element_blank(),
     aspect.ratio = 0.75,
@@ -239,7 +249,8 @@ prop_gam_prev <- ggplot(df_obs_gam, aes(x = x, y = y)) +
   scale_x_continuous(limits = c(0, 1)) +
   #scale_y_continuous(limits = c(0.10, 0.25), breaks = seq(0, 0.35, 0.05)) +
   scale_y_continuous(limits = c(NA, NA), breaks = seq(0, 0.35, 0.05))+
-  labs(x = "Proportion Anopheles gambiae", y = "Proportion ONNV positive") +
+  labs(x = "Proportion Anopheles gambiae", y = "Proportion ONNV positive",
+  title = label_gam) +
   theme_classic() + 
   theme(
     panel.grid = element_blank(),
@@ -259,15 +270,7 @@ print(prop_gam_prev)
 
 
 (prop_fun_prev + prop_gam_prev)
-combined_mosquito_plots_new <- (prop_fun_prev + prop_gam_prev)
-# --- Save Figure 1a
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c_new.png", 
-       plot = combined_mosquito_plots_new,
-       width = 13, 
-       height = 8, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
+
 # --- Save Figure 1a
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c_new.png", 
        plot = prop_gam_prev,
@@ -276,7 +279,6 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c_new.png",
        units = "in", 
        dpi = 300,
        bg = "white")
-
 
 
 # Aedes with ONNV 
@@ -297,30 +299,6 @@ df_aegypti <- calculate_prop_by_variable_multisero_probs(
   breaks_min = aegmin)
 
 df_obs_aeg <- df_aegypti$obs
-df_aegypti$log_model
-
-prop_aeg_prev <- ggplot(df_obs_aeg, aes(x = x, y = y)) +
-  geom_point(color = "#c1518b", size = 5) +
-  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
-  scale_x_continuous(limits = c(0, 1)) +
-  #scale_y_continuous(limits = c(0, 0.35), breaks = seq(0, 0.35, 0.05)) +
-  scale_y_continuous(limits = c(NA, NA), breaks = seq(0, 0.35, 0.05))+
-  labs(x = "Proportion Aedes Aegypti", y = "Proportion ONNV positive") +
-  theme_classic() + 
-  theme(panel.grid = element_blank(),
-    aspect.ratio = 0.75,
-    axis.line = element_line(color = "black", linewidth = 0.7),  # Add x and y axis lines
-    axis.title.x = element_text(size = 24),                             # X-axis label
-    axis.title.y = element_text(size = 24),                             # Y-axis label
-    axis.text.x = element_text(size = 20),                              # X-axis tick labels
-    axis.text.y = element_text(size = 20),                              # Y-axis tick labels
-    legend.title = element_text(size = 20),                             # Legend title
-    legend.text = element_text(size = 20),                               # Legend text
-    axis.ticks.x = element_line(color = "black", size = 0.5),  # X-axis ticks only
-    axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
-    axis.ticks.length = unit(0.2, "cm")
-  )
-
 
 # Albopictus
 df_albopictus <- calculate_prop_by_variable_multisero_probs(
@@ -333,16 +311,19 @@ df_albopictus <- calculate_prop_by_variable_multisero_probs(
   breaks_min = aegmin)
 
 df_obs_albo <- df_albopictus$obs
-df_albopictus$log_model
 
 
-prop_albo_prev <- ggplot(df_obs_albo, aes(x = x, y = y)) +
+label_aeg  <- make_label(df_aegypti$log_model,    "ONNV", "Ae. aegypti")
+label_albo <- make_label(df_albopictus$log_model, "ONNV", "Ae. albopictus")
+
+prop_aeg_prev <- ggplot(df_obs_aeg, aes(x = x, y = y)) +
   geom_point(color = "#c1518b", size = 5) +
   geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
   scale_x_continuous(limits = c(0, 1)) +
   #scale_y_continuous(limits = c(0, 0.35), breaks = seq(0, 0.35, 0.05)) +
   scale_y_continuous(limits = c(NA, NA), breaks = seq(0, 0.35, 0.05))+
-  labs(x = "Proportion Aedes Albopictus", y = "Proportion ONNV positive") +
+  labs(x = "Proportion Aedes Aegypti", y = "Proportion ONNV positive", 
+      title = label_aeg) +
   theme_classic() + 
   theme(panel.grid = element_blank(),
     aspect.ratio = 0.75,
@@ -359,13 +340,34 @@ prop_albo_prev <- ggplot(df_obs_albo, aes(x = x, y = y)) +
   )
 
 
-# supplementary figrue 
+prop_albo_prev <- ggplot(df_obs_albo, aes(x = x, y = y)) +
+  geom_point(color = "#c1518b", size = 5) +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
+  scale_x_continuous(limits = c(0, 1)) +
+  #scale_y_continuous(limits = c(0, 0.35), breaks = seq(0, 0.35, 0.05)) +
+  scale_y_continuous(limits = c(NA, NA), breaks = seq(0, 0.35, 0.05))+
+  labs(x = "Proportion Aedes Albopictus", y = "Proportion ONNV positive",
+      title = label_albo) +
+  theme_classic() + 
+  theme(panel.grid = element_blank(),
+    aspect.ratio = 0.75,
+    axis.line = element_line(color = "black", linewidth = 0.7),  # Add x and y axis lines
+    axis.title.x = element_text(size = 24),                             # X-axis label
+    axis.title.y = element_text(size = 24),                             # Y-axis label
+    axis.text.x = element_text(size = 20),                              # X-axis tick labels
+    axis.text.y = element_text(size = 20),                              # Y-axis tick labels
+    legend.title = element_text(size = 20),                             # Legend title
+    legend.text = element_text(size = 20),                               # Legend text
+    axis.ticks.x = element_line(color = "black", size = 0.5),  # X-axis ticks only
+    axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
+    axis.ticks.length = unit(0.2, "cm")
+  )
+
 anopheles_and_aedes_onnv <- (prop_fun_prev + prop_gam_prev) / (prop_aeg_prev + prop_albo_prev)
 print(anopheles_and_aedes_onnv)
 
-
-
-
+#
+#
 
 
 # ---  CHIK 
