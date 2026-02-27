@@ -719,29 +719,6 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
   invisible(list(plot = p, obs = obs, pred = pred, prevalence_draws = prevalence_draws))
 }
 
-# --- Propotion by mosquito distribution + log population (using binary serostatus)
-calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, breaks_min) {
-  var_mid <- rep(NaN, length(breaks_max))
-  prop_pos <- matrix(NaN, length(breaks_max), 3)
-  
-  for (i in 1:length(breaks_max)) {
-    tmp <- which(data[[var_col]] < breaks_max[i] & data[[var_col]] >= breaks_min[i])
-    if (length(tmp) > 5) {
-      prop_pos[i, 1] <- mean(data[[positive_col]][tmp], na.rm = TRUE)
-      a <- prop.test(sum(data[[positive_col]][tmp]), length(tmp))
-      prop_pos[i, 2:3] <- a$conf.int
-      var_mid[i] <- mean(data[[var_col]][tmp], na.rm = TRUE)
-    }
-  }
-  
-  data.frame(
-    x = var_mid,
-    y = prop_pos[, 1],
-    ymin = prop_pos[, 2],
-    ymax = prop_pos[, 3]
-  )
-}
-
 
 
 # prediction FOI, seroprevelance and infections by region 
@@ -812,6 +789,57 @@ aggregate_predictions_by_region <- function(
   return(out)
 }
 
+
+
+# --- Propotion by mosquito distribution + log population (using binary serostatus)
+calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, breaks_min) {
+  
+  #remove NA from positive_col
+  data <- data[!is.na(data[[positive_col]]), ]
+  var_mid <- rep(NaN, length(breaks_max))
+  prop_pos <- matrix(NaN, length(breaks_max), 3)
+  
+  for (i in 1:length(breaks_max)) {
+
+      tmp <- which(
+      data[[var_col]] < breaks_max[i] &
+      data[[var_col]] >= breaks_min[i]
+    )
+
+
+
+    if (length(tmp) > 10) {
+      prop_pos[i, 1] <- mean(data[[positive_col]][tmp], na.rm = TRUE)
+      a <- prop.test(sum(data[[positive_col]][tmp]), length(tmp))
+      prop_pos[i, 2:3] <- a$conf.int
+      var_mid[i] <- mean(data[[var_col]][tmp], na.rm = TRUE)
+    }
+  }
+
+  obs_df <- data.frame(
+    x = var_mid,
+    y = prop_pos[, 1],
+    ymin = prop_pos[, 2],
+    ymax = prop_pos[, 3]
+  )
+
+  # binomial regression
+  model_df <- data[, c(var_col, positive_col)]
+  model_df <- model_df[complete.cases(model_df), ]
+  
+  formula <- as.formula(paste(positive_col, "~", var_col))
+  
+  log_model <- glm(
+    formula,
+    family = binomial,
+    data = model_df
+  )
+
+  list(
+    obs = obs_df,
+    log_model = log_model
+  )
+}
 
 
 
