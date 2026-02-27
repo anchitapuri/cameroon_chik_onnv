@@ -989,3 +989,4 @@ district_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, 
   
   return(obs)
 }
+

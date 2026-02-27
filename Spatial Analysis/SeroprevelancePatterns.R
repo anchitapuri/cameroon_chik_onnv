@@ -8,6 +8,9 @@ library(ggplot2)
 library(rnaturalearth)
 library(here)
 library(patchwork)
+library(cowplot)
+library(ggpubr)
+
 
 
 # --- Source functions
@@ -207,48 +210,118 @@ base_theme <- theme_classic() +
     axis.ticks.length = unit(0.2, "cm")
   )
 
-make_plot <- function(df_obs, label, xlab, color) {
-  ggplot(df_obs, aes(x = x, y = y)) +
-    geom_point(color = color, size = 5) +
+
+  hist_df <- data.frame(x = as.numeric(raw_data))
+  hist_df <- hist_df[!is.na(hist_df$x), , drop = FALSE]
+
+  # --- MAIN SCATTER ---
+  plot1 <- ggplot(df_obs, aes(x = x, y = y)) +
+    geom_point(color = color, size = 4, alpha = 0.9) +
     geom_errorbar(aes(ymin = ymin, ymax = ymax),
-                  width = 0, color = color) +
-    scale_x_continuous(limits = c(0, 1)) +
-    scale_y_continuous(limits = c(NA, NA),
-                       breaks = seq(0, 0.35, 0.05)) +
-    labs(
-      x = xlab,
-      y = "Proportion ONNV positive",
-      title = label
+                  width = 0, color = color,
+                  alpha = 0.6, linewidth = 0.6) +
+    scale_x_continuous(
+      limits = c(0, 1),
+      expand = expansion(mult = c(0, 0))
     ) +
-    base_theme
+    scale_y_continuous(
+      breaks = seq(0, 0.35, 0.05),
+      expand = expansion(mult = c(0, 0.05))
+    ) +
+    labs(x = xlab, y = "Proportion ONNV positive") +
+    base_theme +
+    theme(
+      axis.title.x = element_text(size = 24),
+      plot.margin = unit(c(0, 0, 0, 0), "cm")
+    )
+
+  # --- HISTOGRAM ---
+  plot2 <- ggplot(hist_df, aes(x = x)) +
+    geom_histogram(
+      fill = color,
+      alpha = 0.5,
+      bins = 30,
+      color = NA
+    ) +
+    scale_x_continuous(
+      limits = c(0, 1),
+      expand = expansion(mult = c(0, 0))
+    ) +
+    scale_y_reverse(
+      expand = expansion(mult = c(0.05, 0))
+    ) +
+    labs(x = NULL, y = "Count") +
+    base_theme +
+    theme(
+      axis.text.x = element_blank(),
+      axis.title.x = element_blank(),
+      axis.ticks.length.x = unit(0, "cm"),
+      plot.margin = unit(c(0, 0, 0, 0), "cm"),
+      panel.grid = element_blank()
+    )
+
+make_plot <- function(df_obs, raw_data, xlab, color) {
+  obs_clean <- df_obs[!is.nan(df_obs$x), ]
+  hist_df <- data.frame(x = as.numeric(raw_data))
+  hist_df <- hist_df[!is.na(hist_df$x), , drop = FALSE]
+
+  hist_breaks <- seq(0, 1, length.out = 31)
+  hist_counts <- hist(hist_df$x, breaks = hist_breaks, plot = FALSE)$counts
+  max_count <- if (length(hist_counts) > 0) max(hist_counts, na.rm = TRUE) else 0
+
+  plot1 <- ggplot(obs_clean, aes(x = x, y = y)) +
+    geom_point(color = color, size = 4, alpha = 0.9) +
+    geom_errorbar(aes(ymin = ymin, ymax = ymax),
+                  width = 0, color = color, alpha = 0.6, linewidth = 0.6) +
+    scale_x_continuous(limits = c(0, 1), expand = expansion(mult = c(0, 0))) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0))) +
+    labs(x = NULL, y = "Proportion ONNV positive") +
+    theme_classic() +
+    theme(
+      panel.grid = element_blank(),
+      aspect.ratio = 0.75,
+      axis.line = element_line(color = "black", linewidth = 0.7),
+      axis.title.y = element_text(size = 24),
+      axis.text.x = element_blank(),
+      axis.text.y = element_text(size = 20),
+      axis.ticks.x = element_blank(),
+      axis.ticks.y = element_line(color = "black", size = 0.5),
+      axis.ticks.length = unit(0.2, "cm"),
+      plot.margin = unit(c(0.1, 0.1, 0.09, 0.09), "cm")
+    )
+
+  plot2 <- ggplot(hist_df, aes(x = x)) +
+    geom_histogram(fill = color, alpha = 0.5, bins = 30, color = NA) +
+    labs(x = xlab, y = "Count") +
+    scale_x_continuous(limits = c(0, 1), expand = expansion(mult = c(0, 0))) +
+    scale_y_reverse(limits = c(max_count, 0), expand = expansion(mult = c(0, 0))) +
+    theme_classic() +
+    theme(
+      panel.grid = element_blank(),
+      aspect.ratio = 0.75,
+      axis.line = element_line(color = "black", linewidth = 0.7),
+      axis.title.x = element_text(size = 24),
+      axis.title.y = element_text(size = 24),
+      axis.text.x = element_text(size = 20),
+      axis.text.y = element_text(size = 20),
+      axis.ticks.x = element_line(color = "black", size = 0.5),
+      axis.ticks.y = element_line(color = "black", size = 0.5),
+      axis.ticks.length = unit(0.2, "cm"),
+      plot.margin = unit(c(0.09, 0.1, 0.1, 0.09), "cm")
+    )
+  p_top <- plot1
+  p_bottom <- plot2
+  
+  p_top / p_bottom + 
+  plot_layout(heights = c(2, 1))  # adjust relative heights as needed
 }
 
-# Funestus
-df_fun <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels,
-  var_col = "fun_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'a', # a = ONNV
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
+
 
 df_fun_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,
   var_col = "fun_pw_district", 
   positive_col = "ONNV_pos",
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
-
-
-
-# Gambiae
-df_gam <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels, 
-  var_col = "gam_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'a',  # a = ONNV
   breaks_max = anoph_max, 
   breaks_min = anoph_min)
 
@@ -265,31 +338,11 @@ aegmax <- seq(0,1,0.1)
 aegmin <- aegmax - 0.5
 aegmin[which(aegmin<0)] <- 0
 
-# Aegypti
-df_aegypti <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels,
-  var_col = "aeg_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'a',  # a = ONNV
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
 
 df_aegypti_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,
   var_col = "aeg_pw_district", 
   positive_col = "ONNV_pos",
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
-
-
-# Albopictus
-df_albopictus <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels,
-  var_col = "alb_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'a',  # a = ONNV
   breaks_max = aegmax, 
   breaks_min = aegmin)
 
@@ -301,46 +354,42 @@ df_albopictus_binary <- calculate_prop_by_variable (
   breaks_min = aegmin)
 
 
-# labels for plots
-label_fun  <- make_label(df_fun_binary$log_model)
-label_gam  <- make_label(df_gam_binary$log_model)
-label_aeg  <- make_label(df_aegypti_binary$log_model)
-label_albo <- make_label(df_albopictus_binary$log_model)
 
-
+# --- Plots
 prop_fun_prev <- make_plot(
   df_fun_binary$obs,
-  label_fun,
+  meta_data_with_labels$fun_pw_district,
   "Proportion Anopheles funestus",
-  "#023e8a"
+  color ="#023e8a"
 )
+
 
 prop_gam_prev <- make_plot(
   df_gam_binary$obs,
-  label_gam,
+  meta_data_with_labels$gam_pw_district,
   "Proportion Anopheles gambiae",
-  "#165262"
+  color ="#165262"
 )
 quartz()
 print(prop_gam_prev)
 
 prop_aeg_prev <- make_plot(
   df_aegypti_binary$obs,
-  label_aeg,
+  meta_data_with_labels$aeg_pw_district,
   "Proportion Aedes aegypti",
-  "#c1518b"
+  color ="#c1518b"
 )
 
 prop_albo_prev <- make_plot(
   df_albopictus_binary$obs,
-  label_albo,
+  meta_data_with_labels$alb_pw_district,
   "Proportion Aedes albopictus",
-  "#430726"
+  color = "#430726"
 )
 
 anopheles_and_aedes_onnv <-
-  (prop_fun_prev + prop_gam_prev) /
-  (prop_aeg_prev + prop_albo_prev)
+  (prop_fun_prev) + (prop_gam_prev) /
+  (prop_aeg_prev) + (prop_albo_prev)
 quartz()
 print(anopheles_and_aedes_onnv)
 
@@ -348,7 +397,7 @@ dfun <- function(model) {
   summary(model)$dispersion
 }
 
-
+# compare models using AIC and log likelihood
 metrics_df <- data.frame(
   species = c(
     "An. funestus",
@@ -371,8 +420,8 @@ metrics_df <- data.frame(
 )
 
 metrics_df$delta_AIC <- metrics_df$AIC - min(metrics_df$AIC)
-metrics_df$k <- 1:nrow(metrics_df)  # or your actual model index
 metrics_df <- metrics_df[order(metrics_df$logLik), ]
+metrics_df$k <- 1:nrow(metrics_df)  
 
 loglik_plot <- ggplot(metrics_df,
                       aes(x = k, y = logLik)) +
@@ -394,7 +443,7 @@ loglik_plot <- ggplot(metrics_df,
 quartz()
 print(loglik_plot)
 
-# --- Save Figure 1a
+# --- Save Figures
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c_new.png", 
        plot = prop_gam_prev,
        width = 10, 
@@ -405,8 +454,8 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c_new.png",
 
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/sup_Fig1.png", 
        plot = anopheles_and_aedes_onnv,
-       width = 12, 
-       height = 10, 
+       width = 15, 
+       height = 11, 
        units = "in", 
        dpi = 300,
        bg = "white")
@@ -414,7 +463,7 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/sup_Fig1.png",
 
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/sup_Fig2.png", 
        plot = loglik_plot,
-       width = 10, 
+       width = 12, 
        height = 10, 
        units = "in", 
        dpi = 300,
@@ -424,27 +473,41 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/sup_Fig2.png",
 
 
 # ---  CHIK 
-df_fun_chik <- calculate_prop_by_variable_multisero_probs(
+df_fun_chik <- calculate_prop_by_variable(
   data = meta_data_with_labels,
   var_col = "fun_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'b', # b = CHIK
+  positive_col = "CHIK_pos",
   breaks_max = anoph_max, 
   breaks_min = anoph_min)
-df_fun$log_model
-
 
 
 # Gambiae
-df_gam_chik <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels, 
+df_gam_chik <- calculate_prop_by_variable(
+  data = meta_data_with_labels,
   var_col = "gam_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'b',  # b = CHIK
+  positive_col = "CHIK_pos",
   breaks_max = anoph_max, 
   breaks_min = anoph_min)
+
+
+
+# Aegypti
+df_aegypti_chik <- calculate_prop_by_variable(
+  data = meta_data_with_labels, 
+  var_col = "aeg_pw_district", 
+  positive_col = "CHIK_pos",
+  breaks_max = aegmax, 
+  breaks_min = aegmin)
+
+  # Albopictus
+df_albopictus_chik <- calculate_prop_by_variable(
+  data = meta_data_with_labels, 
+  var_col = "alb_pw_district", 
+  positive_col = "CHIK_pos",
+  breaks_max = aegmax, 
+  breaks_min = aegmin)
+
+
 
 
 # --- Plots 
@@ -500,15 +563,6 @@ chik_prop_gam_prev <- ggplot(df_gam_chik$obs, aes(x = x, y = y)) +
 print(chik_prop_gam_prev)
 
 
-# Aegypti
-df_aegypti_chik <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels, 
-  var_col = "aeg_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'b',  # b = CHIK 
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
 
 chik_prop_aeg_prev <- ggplot(df_aegypti_chik$obs, aes(x = x, y = y)) +
   geom_point(color = "#c1518b", size = 5) +
@@ -533,16 +587,6 @@ chik_prop_aeg_prev <- ggplot(df_aegypti_chik$obs, aes(x = x, y = y)) +
   )
 
 
-# Albopictus
-df_albopictus_chik <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels, 
-  var_col = "alb_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'b',  # b = CHIK 
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
-
 chik_prop_albo_prev <- ggplot(df_albopictus_chik$obs, aes(x = x, y = y)) +
   geom_point(color = "#c1518b", size = 5) +
   geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#c1518b") +
@@ -564,7 +608,6 @@ chik_prop_albo_prev <- ggplot(df_albopictus_chik$obs, aes(x = x, y = y)) +
     axis.ticks.y = element_line(color = "black", size = 0.5),  # Y-axis ticks only
     axis.ticks.length = unit(0.2, "cm")
   )
-
 
 
 
@@ -611,3 +654,95 @@ prop_pop_prev <- ggplot(df_pop, aes(x = x, y = y)) +
     axis.ticks.length = unit(0.2, "cm")
   )
 print(prop_pop_prev)
+
+
+
+
+# --- Multisero probs with mosquito distributions 
+
+# Funestus
+df_fun <- calculate_prop_by_variable_multisero_probs(
+  data = meta_data_with_labels,
+  var_col = "fun_pw_district", 
+  chains_df = chains_df,
+  infM = preprocessed_data$data$infM,
+  pathogen_col = 'a', # a = ONNV
+  breaks_max = anoph_max, 
+  breaks_min = anoph_min)
+
+# Gambiae
+df_gam <- calculate_prop_by_variable_multisero_probs(
+  data = meta_data_with_labels, 
+  var_col = "gam_pw_district", 
+  chains_df = chains_df,
+  infM = preprocessed_data$data$infM,
+  pathogen_col = 'a',  # a = ONNV
+  breaks_max = anoph_max, 
+  breaks_min = anoph_min)
+
+# Aegypti
+df_aegypti <- calculate_prop_by_variable_multisero_probs(
+  data = meta_data_with_labels,
+  var_col = "aeg_pw_district", 
+  chains_df = chains_df,
+  infM = preprocessed_data$data$infM,
+  pathogen_col = 'a',  # a = ONNV
+  breaks_max = aegmax, 
+  breaks_min = aegmin)
+# Albopictus
+df_albopictus <- calculate_prop_by_variable_multisero_probs(
+  data = meta_data_with_labels,
+  var_col = "alb_pw_district", 
+  chains_df = chains_df,
+  infM = preprocessed_data$data$infM,
+  pathogen_col = 'a',  # a = ONNV
+  breaks_max = aegmax, 
+  breaks_min = aegmin)
+
+
+
+
+# --- Top plot: binned proportions (scatter with error bars)
+obs <- df_gam_binary$obs
+obs_clean <- obs[!is.nan(obs$x), ]
+
+p_top <- ggplot(obs_clean, aes(x = x, y = y)) +
+  geom_point(size = 3, color = "#2a7b8e") +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax), 
+                width = 0.01, color = "#2a7b8e") +
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_y_continuous(labels = scales::label_number(accuracy = 0.01)) +
+  labs(
+    x = NULL,  # suppress x label on top plot
+    y = "Proportion ONNV positive"
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+# --- Bottom plot: histogram of raw gam_pw_district values
+plot_df <- data.frame(x = meta_data_with_labels$gam_pw_district)
+
+p_bottom <- ggplot(plot_df, aes(x = x)) +
+  geom_histogram(binwidth = 0.05, fill = "#7ab5c0", color = "white") +
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_y_reverse() +  # flip so bars grow downward to mirror your figure
+  labs(
+    x = "Proportion Anopheles gambiae",
+    y = "Count"
+  ) +
+  theme_classic()
+quartz()
+# --- Combine with patchwork
+prop_gam_prev <- p_top / p_bottom + 
+  plot_layout(heights = c(2, 1))  # adjust relative heights as needed
+
+
+# --- Save Figures
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c_new.png", 
+       plot = prop_gam_prev,
+       width = 8, 
+       height = 8, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
