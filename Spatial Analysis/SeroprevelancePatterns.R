@@ -336,10 +336,10 @@ dfun <- function(model) {
 # compare models using AIC and log likelihood
 metrics_df <- data.frame(
   species = c(
-    "An. funestus",
-    "An. gambiae",
-    "Ae. aegypti",
-    "Ae. albopictus"
+    "Anopheles \n funestus",
+    "Anopheles \n gambiae",
+    "Aedes \n aegypti",
+    "Aedes \n albopictus"
   ),
   AIC = c(
     AIC(df_fun_binary$log_model),
@@ -368,16 +368,33 @@ loglik_plot <- ggplot(metrics_df,
     x = "Species",
     y = "Log Likelihood"
   ) +
-  theme_minimal(base_size = 14) +
+  theme_minimal()  +
   theme(
-    panel.grid.major = element_line(color = "#d0d0d0"),
-    panel.grid.minor = element_line(color = "#e6e6e6"),
-    axis.title.y = element_text(size = 18),
-    axis.text = element_text(size = 14),
-    plot.margin = margin(10, 10, 10, 10)
+    panel.grid = element_blank(),
+    aspect.ratio = 0.75,
+    axis.line = element_line(color = "black", linewidth = 0.7),
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),
+    axis.text.x = element_text(size = 18),
+    axis.text.y = element_text(size = 18),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20),
+    axis.ticks.x = element_line(color = "black", size = 0.5),
+    axis.ticks.y = element_line(color = "black", size = 0.5),
+    axis.ticks.length = unit(0.2, "cm"),
+    plot.margin = margin(t = 10, r = 40, b = 10, l = 10, unit = "pt")
   )
+
+  
 quartz()
 print(loglik_plot)
+
+
+# beta 
+print(summary(df_fun_binary$log_model))
+print(summary(df_gam_binary$log_model))
+print(summary(df_aegypti_binary$log_model))
+print(summary(df_albopictus_binary$log_model))
 
 # --- Save Figures
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c_new.png", 
@@ -399,8 +416,8 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/sup_Fig1.png",
 
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/sup_Fig2.png", 
        plot = loglik_plot,
-       width = 12, 
-       height = 4, 
+       width = 8, 
+       height = 6,
        units = "in", 
        dpi = 300,
        bg = "white")
@@ -505,31 +522,10 @@ df_onnv_pop <- calculate_prop_by_variable(
   var_col = "log_pop_density", 
   positive_col = "ONNV_pos",
   breaks_max = popdenmax, 
-  df_onnv_popbreaks_min = popdenmin)
+  breaks_min = popdenmin)
 
-df_onnv_pop$log_model
+summary(df_onnv_pop$log_model)
 
-
-# Plot
-prop_pop_prev <- ggplot(df_pop, aes(x = x, y = y)) +
-  geom_point(color = "#8b145b", size = 4) +
-  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0, color = "#8B6914") +
-  scale_y_continuous(limits = c(NA, NA), breaks = seq(0, 0.35, 0.05)) +
-  labs(x = "Log population density (per km²)", y = "Proportion ONNV positive") +
-  theme_classic() +
-  theme(
-    panel.grid = element_blank(),
-    aspect.ratio = 0.75,
-    axis.line = element_line(color = "black", linewidth = 0.7),
-    axis.title.x = element_text(size = 24),
-    axis.title.y = element_text(size = 24),
-    axis.text.x  = element_text(size = 20),
-    axis.text.y  = element_text(size = 20),
-    axis.ticks.x = element_line(color = "black", size = 0.5),
-    axis.ticks.y = element_line(color = "black", size = 0.5),
-    axis.ticks.length = unit(0.2, "cm")
-  )
-print(prop_pop_prev)
 
 
 
@@ -577,48 +573,3 @@ df_albopictus <- calculate_prop_by_variable_multisero_probs(
 
 
 
-
-# --- Top plot: binned proportions (scatter with error bars)
-obs <- df_gam_binary$obs
-obs_clean <- obs[!is.nan(obs$x), ]
-
-p_top <- ggplot(obs_clean, aes(x = x, y = y)) +
-  geom_point(size = 3, color = "#2a7b8e") +
-  geom_errorbar(aes(ymin = ymin, ymax = ymax), 
-                width = 0.01, color = "#2a7b8e") +
-  scale_x_continuous(limits = c(0, 1)) +
-  scale_y_continuous(labels = scales::label_number(accuracy = 0.01)) +
-  labs(
-    x = NULL,  # suppress x label on top plot
-    y = "Proportion ONNV positive"
-  ) +
-  theme_classic() +
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x = element_blank())
-
-# --- Bottom plot: histogram of raw gam_pw_district values
-plot_df <- data.frame(x = meta_data_with_labels$gam_pw_district)
-
-p_bottom <- ggplot(plot_df, aes(x = x)) +
-  geom_histogram(binwidth = 0.05, fill = "#7ab5c0", color = "white") +
-  scale_x_continuous(limits = c(0, 1)) +
-  scale_y_reverse() +  # flip so bars grow downward to mirror your figure
-  labs(
-    x = "Proportion Anopheles gambiae",
-    y = "Count"
-  ) +
-  theme_classic()
-quartz()
-# --- Combine with patchwork
-prop_gam_prev <- p_top / p_bottom + 
-  plot_layout(heights = c(2, 1))  # adjust relative heights as needed
-
-
-# --- Save Figures
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c_new.png", 
-       plot = prop_gam_prev,
-       width = 8, 
-       height = 8, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")

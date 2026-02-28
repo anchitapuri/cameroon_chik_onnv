@@ -150,7 +150,9 @@ plot_predicted_foi <- function(model, coop, pathogen_name = "ONNV") {
       legend.position = "bottom",
       plot.title = element_text(size = 20),
       axis.text = element_blank(),      # Remove axis text (lat/long labels)
-      axis.ticks = element_blank()) + 
+      axis.ticks = element_blank(),
+      legend.text = element_text(size = 14),   # tick label size
+      legend.title = element_text(size = 14)) +  # "Seroprevalence" title size) + 
     annotation_scale(
     bar_cols = c("black", "white"),  # alternating black/white like the reference
     height = unit(0.2, "cm"),
@@ -254,7 +256,9 @@ plot_predicted_seroprevalence <- function(foi_result, model, age_groups, age_wei
       legend.position = "bottom",
       plot.title = element_text(size = 20),
       axis.text = element_blank(),      # Remove axis text (lat/long labels)
-      axis.ticks = element_blank()
+      axis.ticks = element_blank(),
+      legend.text = element_text(size = 14),   # tick label size
+      legend.title = element_text(size = 14),  # "Seroprevalence" title size
       ) +
     
     annotation_scale(
@@ -394,7 +398,7 @@ plot_predicted_annual_infections <- function(foi_result, model, age_groups, age_
     scale_color_viridis_c(
       option = "mako",
       trans = "log10",
-      name = "Annual\nInfections",
+      name = "Annual Infections",
       labels = scales::comma_format(),
       guide = guide_colorbar(
         direction = "horizontal",
@@ -412,7 +416,9 @@ plot_predicted_annual_infections <- function(foi_result, model, age_groups, age_
       legend.position = "bottom",
       plot.title = element_text(size = 20),
       axis.text = element_blank(),      # Remove axis text (lat/long labels)
-      axis.ticks = element_blank()
+      axis.ticks = element_blank(),
+      legend.text = element_text(size = 14),   # tick label size
+      legend.title = element_text(size = 14),  # "Seroprevalence" title size
     ) +
   annotation_scale(
     bar_cols = c("black", "white"),  # alternating black/white like the reference

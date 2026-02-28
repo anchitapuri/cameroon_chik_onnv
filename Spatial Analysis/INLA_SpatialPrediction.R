@@ -293,11 +293,11 @@ infections_onnv$seropositive_people  # Min and max by location
 # combined plots 
 maps <- foi_onnv$plot + sero_onnv$plot + infections_onnv$plot 
 
-# --- Save Figure 4a
+
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4b.png", 
        plot = maps,
-       width = 12, 
-       height = 15, 
+       width = 10, 
+       height = 7, 
        units = "in", 
        dpi = 300,
        bg = "white")
