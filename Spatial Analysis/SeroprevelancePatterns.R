@@ -190,7 +190,6 @@ anoph_min[which(anoph_min < 0)] <- 0
 base_theme <- theme_classic() +
   theme(
     panel.grid = element_blank(),
-    aspect.ratio = 0.75,
     axis.line = element_line(color = "black", linewidth = 0.7),
     axis.title.x = element_text(size = 24),
     axis.title.y = element_text(size = 24),
@@ -204,54 +203,51 @@ base_theme <- theme_classic() +
   )
 
 make_plot <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
-  
+
   ylab <- paste0("Proportion ", gsub("_pos", "", pos_col), " positive")
-  
+
   obs_clean <- df_obs[!is.nan(df_obs$x), ]
+
+  # truncate CIs to [0, 0.5]
+  obs_clean$ymin <- pmax(obs_clean$ymin, 0)
+  obs_clean$ymax <- pmin(obs_clean$ymax, 0.5)
+
   hist_df <- data.frame(x = as.numeric(raw_data))
   hist_df <- hist_df[!is.na(hist_df$x), , drop = FALSE]
-  hist_breaks <- seq(0, 1, length.out = 31)
-  hist_counts <- hist(hist_df$x, breaks = hist_breaks, plot = FALSE)$counts
-  max_count <- if (length(hist_counts) > 0) max(hist_counts, na.rm = TRUE) else 0
-  
-  plot1 <- ggplot(obs_clean, aes(x = x, y = y)) +
-    geom_point(color = color, size = 4, alpha = 0.9) +
-    geom_errorbar(aes(ymin = ymin, ymax = ymax),
-                  width = 0, color = color, alpha = 0.6, linewidth = 0.6) +
-    scale_x_continuous(limits = c(0, 1)) +
-    scale_y_continuous() +
-    labs(x = xlab, y = ylab) +
-    theme_classic() + base_theme
-  
-  plot2 <- ggplot(hist_df, aes(x = x)) +
+
+  x_scale <- scale_x_continuous(limits = c(0, 1), expand = c(0, 0))
+
+  plot_hist <- ggplot(hist_df, aes(x = x)) +
     geom_histogram(fill = color, alpha = 0.5, bins = 30, color = NA) +
-    labs(x = xlab, y = "Count") +
-    scale_x_continuous(limits = c(0, 1)) +
-    scale_y_continuous(limits = c(0, max_count)) +
-    theme_classic() +
+    x_scale +
+    labs(x = NULL, y = "Count") +
+    base_theme +
     theme(
-      panel.grid = element_blank(),
-      aspect.ratio = 0.75,
-      axis.line = element_line(color = "black", linewidth = 0.7),
-      axis.title.x = element_text(size = 12),
-      axis.title.y = element_text(size = 12),
-      axis.text.x = element_text(size = 12),
-      axis.text.y = element_text(size = 12),
-      legend.title = element_text(size = 12),
-      legend.text = element_text(size = 12),
-      axis.ticks.x = element_line(color = "black", size = 0.5),
-      axis.ticks.y = element_line(color = "black", size = 0.5),
-      axis.ticks.length = unit(0.2, "cm")
+      axis.text.x  = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.margin  = margin(t = 10, r = 18, b = 18, l = 18)
     )
+
+  plot_scatter <- ggplot(obs_clean, aes(x = x, y = y)) +
+    geom_point(color = color, size = 4, alpha = 0.9) +
+    geom_errorbar(
+      aes(ymin = ymin, ymax = ymax),
+      width = 0, color = color, alpha = 0.6, linewidth = 0.6
+    ) +
+    x_scale +
+    coord_cartesian(ylim = c(0, 0.5), expand = FALSE) +
+    scale_y_continuous(breaks = seq(0, 0.5, 0.1)) +
+    labs(x = xlab, y = ylab) +
+    base_theme +
+    theme(
+      plot.margin = margin(t = 18, r = 18, b = 10, l = 18)
+    )
+
+  plot_hist / plot_scatter +
+    patchwork::plot_layout(heights = c(1.2, 3))
   
-  inset_pos <- if (grepl("CHIK", pos_col)) {
-    inset_element(plot2, 0.6, 0.6, 1, 1)   # top right
-  } else {
-    inset_element(plot2, 0.6, 0, 1, 0.4)   # bottom right
-  }
-  
-  plot1 + inset_pos
 }
+
 
 
 
@@ -300,7 +296,6 @@ prop_fun_prev <- make_plot(
   color ="#023e8a", pos_col =  "ONNV_pos"
 )
 
-
 prop_gam_prev <- make_plot(
   df_gam_binary$obs,
   meta_data_with_labels$gam_pw_district,
@@ -309,6 +304,8 @@ prop_gam_prev <- make_plot(
 )
 quartz()
 print(prop_gam_prev)
+
+
 
 prop_aeg_prev <- make_plot(
   df_aegypti_binary$obs,
@@ -324,9 +321,12 @@ prop_albo_prev <- make_plot(
   color = "#430726", pos_col =  "ONNV_pos"
 )
 
-anopheles_and_aedes_onnv <- 
-  (prop_fun_prev + prop_gam_prev) /
-  (prop_aeg_prev + prop_albo_prev)
+anopheles_and_aedes_onnv <-
+  patchwork::wrap_plots(
+    prop_fun_prev, prop_gam_prev, prop_aeg_prev, prop_albo_prev,
+    ncol = 2
+  ) +
+  patchwork::plot_layout(axes = "collect_x")
 
 
 dfun <- function(model) {
@@ -405,10 +405,10 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c_new.png",
        dpi = 300,
        bg = "white")
 
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/sup_Fig1.png", 
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/supplementary_Fig1.png", 
        plot = anopheles_and_aedes_onnv,
-       width = 16, 
-       height = 11, 
+       width = 12, 
+       height = 12, 
        units = "in", 
        dpi = 300,
        bg = "white")

@@ -32,12 +32,12 @@ set_cmdstan_path(cmdstan_path)
 
 # Compile model
 model_path = "/Users/ap2488/Desktop/Cameroon_Analysis_2025/Final_MultiSero.stan"
-mod = cmdstan_model(model_path_final, pedantic=FALSE)
+mod = cmdstan_model(model_path, pedantic=FALSE)
 
 # Import data file 
 meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv')
 nrow(meta_data)
-
+unique(meta_data$year_of_survey)
 
 # Remove NAs
 meta_data_full_model <- meta_data %>%
@@ -135,17 +135,29 @@ fit_onnv_only_model$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/fi
 # Read fit RDS
 fit_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/adapted_full_model_fits.rds')
 fit_onnv_only_model <-readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/adapted_onnv_only_model_fits.rds')
+fit_naive_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/naive_model_fits.rds')
+
+
 
 # extract chains
 chains <- fit_full_model$draws(format='df')
 chains_df <- as.data.frame(chains)
 
+# extract chains - onnv only model
+chain_onnv_only <- fit_onnv_only_model$draws(format='df')
+chains_df_onnv_only <- as.data.frame(chain_onnv_only)
+
+# extract chains - onnv only model
+chains_naive_model <- fit_naive_model$draws(format='df')
+chains_df_naive_model <- as.data.frame(chains_naive_model)
+
+
 # Plot trace plots with all chains clearly visible
 color_scheme_set("mix-blue-red")
-p1 <- mcmc_trace(fit_full_model$draws(c("seroAll", "lp__")))
-p2 <- mcmc_trace(fit_full_model$draws(c("mu0", "mu1")))
-p3 <- mcmc_trace(fit_full_model$draws(c('sd0','sd1')))
-p4 <- mcmc_trace(fit_full_model$draws(c('phi','rho00')))
+p1 <- mcmc_trace(fit_naive_model$draws(c("seroAll", "lp__")))
+p2 <- mcmc_trace(fit_naive_model$draws(c("mu0", "mu1")))
+p3 <- mcmc_trace(fit_naive_model$draws(c('sd0','sd1')))
+p4 <- mcmc_trace(fit_naive_model$draws(c('phi','rho00')))
 quartz()
 print(p1 + p2 + p3 + p4)
 
@@ -173,7 +185,8 @@ mu <- extract_mu(chains_df, preprocessed_data_full_model$data, pathogens=preproc
 print(mu)
 sero <- extract_sero(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
 print(sero)
-
+sds <- extract_sd(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
+print(sds)
 
 # MAYV homologous vs cross reactive increase 
 # --- Extract cross reactivity - MAYV vs ONNV and CHIK 
@@ -310,7 +323,59 @@ print(phi)
 # 2) Compare multisero model estimates to 2D Mixture model fits 
 # ---- Fit CHIK  - using 50% for comp2
 fmm_normal_chik <- mixfit(full_model_alpha$CHIKV_sE2_log, ncomp = 2, family="normal")
+quartz()
 plot(fmm_normal_chik)
+
+mixture_model_chik_data <- meta_data_full_model
+mixture_model_chik_data$CHIK_pos_mixture_model <- as.numeric(ifelse(fmm_normal_chik$comp.prob[, 2] > 0.5, "1", "0"))
+table(mixture_model_chik_data$CHIK_pos_mixture_model)
+
+
+aegmax <- seq(0,1,0.1)
+aegmin <- aegmax - 0.5
+aegmin[which(aegmin<0)] <- 0
+# Aegypti
+df_aegypti_chik_mixture_model <- calculate_prop_by_variable(
+  data = mixture_model_chik_data, 
+  var_col = "aeg_pw_district", 
+  positive_col = "CHIK_pos_mixture_model",
+  breaks_max = aegmax, 
+  breaks_min = aegmin)
+
+  # Albopictus
+df_albopictus_chik_mixture_model <- calculate_prop_by_variable(
+  data = mixture_model_chik_data, 
+  var_col = "alb_pw_district", 
+  positive_col = "CHIK_pos_mixture_model",
+  breaks_max = aegmax, 
+  breaks_min = aegmin)
+
+
+prop_aeg_prev_chik <- make_plot(
+  df_aegypti_chik_mixture_model$obs,
+  mixture_model_chik_data$aeg_pw_district,
+  "Proportion Aedes aegypti",
+  color ="#c1518b", pos_col =  "CHIK_pos_mixture_model"
+)
+
+prop_albo_prev_chik <- make_plot(
+  df_albopictus_chik_mixture_model$obs,
+  mixture_model_chik_data$alb_pw_district,
+  "Proportion Aedes albopictus",
+  color = "#430726", pos_col =  "CHIK_pos_mixture_model"
+)
+quartz()
+aedes_chik <- (prop_aeg_prev_chik + prop_albo_prev_chik)
+
+
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/Fig1.png", 
+       plot = aedes_chik,
+       width = 16, 
+       height = 11, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
+
 #define threshold to get chik+ve and chik-ve
 pred.dat_normal_chik <-cbind(fmm_normal_chik$data, fmm_normal_chik$comp.prob)
 chik_positive_normal <- ifelse(pred.dat_normal_chik[, 3] > 0.5, "1", "0")
@@ -333,3 +398,29 @@ plot(fmm_normal_mayv)
 pred.dat_normal_mayv<-cbind(fmm_normal_mayv$data, fmm_normal_mayv$comp.prob)
 mayv_positive_normal <- ifelse(pred.dat_normal_mayv[, 3] > 0.5, "1", "0")
 table(mayv_positive_normal)
+
+
+
+# CHIK vs ONNV correlation plot 
+quartz()
+plot(full_model_alpha$ONNV_VLP_log, full_model_alpha$CHIKV_sE2_log,col = "#003c8b", pch = 16, xlab = "Log (ONNV VLP MFI)", ylab = "Log (CHIK sE2 MFI)")
+
+
+
+min(full_model_alpha$ONNV_VLP_log)
+min(full_model_alpha$CHIKV_sE2_log)
+
+max(full_model_alpha$ONNV_VLP_log)
+max(full_model_alpha$CHIKV_sE2_log)
+
+
+
+
+# compare naive model fits to multisero model fits
+lli <- data.frame(model = c('Full Model', 'Naive Model'),
+                  par = 'LogLik',
+                  med = NA, ciL = NA, ciU = NA)
+
+lli[1, 3:5] <- quantile(chains_df$sumloglik,c(0.5, 0.025, 0.975))
+lli[2, 3:5] <- quantile(chains_df_naive_model$sumloglik, c(0.5, 0.025, 0.975))
+lli

@@ -129,14 +129,16 @@ init_diffSds <- function(data, nChains){
 
 
 #----- Extract prevalence estimates
-extract_sero <- function(chains, data, pathogens){
+extract_sd <- function(chains, data, pathogens){
   
-  sero <- data.frame(pathogen=pathogens, med=NA, ciL=NA, ciU=NA)
+  sd0s <- data.frame(pathogen=pathogens, par='sd0', med=NA, ciL=NA, ciU=NA)
+  sd1s <- data.frame(pathogen='all', par='sd1', med=NA, ciL=NA, ciU=NA)
   
-  for(p in 1:data$nP) sero[p,2:4] <- quantile(chains[,paste('seroAll[', paste(p,']', sep=''), sep='')], c(0.5,0.025,0.975))
-  sero <- sero[!sero$med==0, ]
+  for(p in 1:data$nP) sd0s[p, 3:5] <- quantile(chains[,paste('sd0[', paste(p,']', sep=''), sep='')], c(0.5,0.025,0.975))
+  sd1s[1, 3:5] <- quantile(chains[,'sd1'], c(0.5,0.025,0.975))
   
-  return(sero)
+  sds <- rbind(sd0s, sd1s)
+  return(sds)
 }
 
 
@@ -161,7 +163,18 @@ extract_covM <- function(chains, data){
   return(covM)
 }
 
-
+#----- Extract gaussian sds
+extract_sds <- function(chains, data, pathogens){
+  
+  sds <- data.frame(pathogen=rep(pathogens, 2), 
+                    par=rep(c('sd0','sd1'), each=length(pathogens)), 
+                    med=NA, ciL=NA, ciU=NA)
+  
+  for(p in 1:data$nP) sds[p, 3:5] <- quantile(chains[,paste('sd0[', paste(p,']', sep=''), sep='')], c(0.5,0.025,0.975))
+  for(p in 1:data$nP) sds[p+data$nP, 3:5] <- quantile(chains[,paste('sd1[', paste(p,']', sep=''), sep='')], c(0.5,0.025,0.975))
+  
+  return(sds)
+}
 
 #----- Plot gaussian distribution fits
 plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
