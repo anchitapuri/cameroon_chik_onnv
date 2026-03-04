@@ -24,6 +24,8 @@ library(patchwork)
 library(mixR)
 
 source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/MultiSeroModel/MultiSeroFunctions.R'))
+source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
+
 
 # Setup cmdstan
 check_cmdstan_toolchain()
@@ -31,7 +33,7 @@ cmdstan_path <- "/Users/ap2488/.cmdstan/cmdstan-2.36.0"
 set_cmdstan_path(cmdstan_path)
 
 # Compile model
-model_path = "/Users/ap2488/Desktop/Cameroon_Analysis_2025/Final_MultiSero.stan"
+model_path = "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/Final_MultiSero.stan"
 mod = cmdstan_model(model_path, pedantic=FALSE)
 
 # Import data file 
@@ -100,9 +102,11 @@ saveRDS(preprocessed_data_onnv_only_model, '/Users/ap2488/Desktop/Cameroon_Analy
 preprocessed_data_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_full_model.rds')
 
 #--- Fit full model 
-ini <- init_diffSds(preprocessed_data_full_model$data, nChains = 3)
+ini <- init(preprocessed_data_full_model$data, nChains = 3)
+ini
+
 fit_full_model <- mod$sample(
-data = preprocessed_data$data, 
+data = preprocessed_data_full_model$data, 
 chains = 3, 
 iter_sampling = 3000, 
 refresh = 100, 
@@ -128,12 +132,12 @@ save_cmdstan_config=TRUE
 
 
 #save fits
-fit_full_model$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/fit_full_model.rds')
-fit_onnv_only_model$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/fit_onnv_only_model.rds')
+fit_full_model$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/3rdMarch_full_model_fits.rds')
+fit_onnv_only_model$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/adapted_onnv_only_model_fits.rds')
 
 
 # Read fit RDS
-fit_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/adapted_full_model_fits.rds')
+fit_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/3rdMarch_full_model_fits.rds')
 fit_onnv_only_model <-readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/adapted_onnv_only_model_fits.rds')
 fit_naive_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/naive_model_fits.rds')
 
@@ -142,6 +146,7 @@ fit_naive_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/naive_m
 # extract chains
 chains <- fit_full_model$draws(format='df')
 chains_df <- as.data.frame(chains)
+
 
 # extract chains - onnv only model
 chain_onnv_only <- fit_onnv_only_model$draws(format='df')
@@ -154,10 +159,10 @@ chains_df_naive_model <- as.data.frame(chains_naive_model)
 
 # Plot trace plots with all chains clearly visible
 color_scheme_set("mix-blue-red")
-p1 <- mcmc_trace(fit_naive_model$draws(c("seroAll", "lp__")))
-p2 <- mcmc_trace(fit_naive_model$draws(c("mu0", "mu1")))
-p3 <- mcmc_trace(fit_naive_model$draws(c('sd0','sd1')))
-p4 <- mcmc_trace(fit_naive_model$draws(c('phi','rho00')))
+p1 <- mcmc_trace(fit_full_model$draws(c("seroAll", "lp__")))
+p2 <- mcmc_trace(fit_full_model$draws(c("mu0", "mu1")))
+p3 <- mcmc_trace(fit_full_model$draws(c('sd0','sd1')))
+p4 <- mcmc_trace(fit_full_model$draws(c('phi','rho00')))
 quartz()
 print(p1 + p2 + p3 + p4)
 
@@ -351,27 +356,69 @@ df_albopictus_chik_mixture_model <- calculate_prop_by_variable(
   breaks_min = aegmin)
 
 
-prop_aeg_prev_chik <- make_plot(
+
+plot_chik_2d_model <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
+
+  ylab <- paste0("Proportion ", gsub("_pos", "", pos_col), "positive")
+
+  obs_clean <- df_obs[!is.nan(df_obs$x), ]
+
+
+
+  x_scale <- scale_x_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.25),
+    labels = c("0", "0.25", "0.5", "0.75", "1"),
+    expand = c(0, 0)
+  )
+
+
+  plot_scatter <- ggplot(obs_clean, aes(x = x, y = y)) +
+    geom_point(color = color, size = 4, alpha = 0.9) +
+    geom_errorbar(
+      aes(ymin = ymin, ymax = ymax),
+      width = 0, color = color, alpha = 0.6, linewidth = 0.6
+    ) +
+    x_scale +
+    coord_cartesian(ylim = c(0, 0.2), expand = FALSE) +
+    scale_y_continuous(breaks = seq(0, 0.2, 0.1)) +
+    labs(x = xlab, y = ylab) +
+    base_theme +
+    theme(
+      plot.margin = margin(t = 10, r = 14, b = 12, l = 14)
+    )
+    return(plot_scatter)
+}
+
+
+prop_aeg_prev_chik <- plot_chik_2d_model(
   df_aegypti_chik_mixture_model$obs,
   mixture_model_chik_data$aeg_pw_district,
   "Proportion Aedes aegypti",
   color ="#c1518b", pos_col =  "CHIK_pos_mixture_model"
 )
 
-prop_albo_prev_chik <- make_plot(
+prop_albo_prev_chik <- plot_chik_2d_model(
   df_albopictus_chik_mixture_model$obs,
   mixture_model_chik_data$alb_pw_district,
   "Proportion Aedes albopictus",
   color = "#430726", pos_col =  "CHIK_pos_mixture_model"
 )
 quartz()
-aedes_chik <- (prop_aeg_prev_chik + prop_albo_prev_chik)
+prop_albo_prev_chik
+
+aedes_chik <- 
+  patchwork::wrap_plots(
+    prop_aeg_prev_chik, prop_albo_prev_chik,
+    ncol = 2
+  ) +
+  patchwork::plot_layout(axes = "collect_x")
 
 
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/Fig1.png", 
        plot = aedes_chik,
-       width = 16, 
-       height = 11, 
+       width = 10, 
+       height = 4, 
        units = "in", 
        dpi = 300,
        bg = "white")

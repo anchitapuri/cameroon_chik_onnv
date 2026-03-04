@@ -14,12 +14,8 @@ data {
 
 parameters {
  vector<lower=0,upper=1>[nPp] sero; // infection prevalence
- // pathogens specific sd0?
  vector <lower=0> [nP] sd0;
- //real<lower=0> sd0; // sd neg
- // shared sd1 - both ONNV and CHIK have tight pos distributions
  real<lower=0> sd1; // sd pos
- //vector<lower=-1>[nP] mu0; // mean neg
  vector [nP] mu0;
  vector<lower=0>[nPp] mu1; // mean pos
  vector<lower=0>[(nP*nPp)-(nPp)] phi; // relative cross-reactive titer increase
@@ -65,9 +61,6 @@ transformed parameters {
   } 
   
   //--- gaussian means & sds ---//
-  //sigma[1,1:(nP-1)] = rep_vector(sd0, (nP-1));
-  //sigma[1,nP] = sd0; // removed ELISA component 
-  //sigma[1] = rep_vector(sd0, nP);
   sigma[1] = sd0;
   mu[1,] = mu0;
   for(c in 2:nC){
@@ -158,8 +151,6 @@ model {
   sero ~ beta(1,5);
   mu0 ~ normal(5, 0.5); 
   mu1 ~ normal(2.5, 0.1);
-  mu1[1] ~ normal(2, 0.1);
-  mu1[2]  ~ normal(3, 0.1);
   sd0 ~ normal(1, 0.1);
   sd1 ~ normal(0.3, 0.05);
   phi ~ lognormal(log(0.3), 0.3);

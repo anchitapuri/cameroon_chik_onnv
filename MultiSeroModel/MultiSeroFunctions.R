@@ -78,53 +78,20 @@ prepare_multiplex_sero_data <- function(
   ))
 }
 
-
-
-#--- chain starting values
 init <- function(data, nChains){
   ii <- init <- list()
   for(i in 1:nChains){
-    init$sero <- array(runif(data$nPp, 0.2, 0.8))
+    init$sero <- array(runif(data$nPp,  0.15, 0.30))
     init$sd0 <- runif(data$nP, 0.4, 0.8)
-    init$sd1 <- runif(1, 0.3, 0.6)
-    init$mu0 <- runif(data$nP, 3, 5)
-    init$mu1 <- runif(data$nPp, 1.5, 4.5)
-    init$phi <- runif((data$nP * data$nPp - (data$nPp)), 0.01, 0.5)
-    init$rho00 <- runif(1, 0.4, 0.7)
+    init$sd1 <- runif(1, 0.5, 1)
+    init$mu0 <- runif(data$nP, 4.5, 6.5)
+    init$mu1 <- runif(data$nPp, 2.0, 3.5)
+    init$phi <- runif((data$nP * data$nPp - (data$nPp)), 0.30, 0.70)
+    init$rho00 <- runif(1, 0.25, 0.40)
     ii[[i]] <- init
   } 
   
   return(ii)
-}
-
-init_diffSds <- function(data, nChains){
-  ii <- vector("list", nChains)
-  for(i in 1:nChains){
-    ii[[i]] <- list(
-      sero = c(
-        runif(1, 0.22, 0.28),
-        runif(1, 0.12, 0.18)
-      ),
-      mu0 = c(
-        runif(1, 4.3, 5.0),
-        runif(1, 6.0, 6.8),
-        runif(1, 5.7, 6.4)
-      ),
-      mu1 = c(
-        runif(1, 1.8, 2.2),
-        runif(1, 2.7, 3.3)
-      ),
-      sd0 = c(
-        runif(1, 0.75, 1.00),  # ONNV - narrower
-        runif(1, 0.50, 0.60),  # CHIK - narrower
-        runif(1, 1.10, 1.30)   # MAYV - wider
-      ),
-      sd1 = runif(1, 0.25, 0.45),
-      phi = runif((data$nP * data$nPp - data$nPp), 0.3, 0.7),
-      rho00 = runif(1, 0.25, 0.35)
-    )
-  }
-  ii
 }
 
 
@@ -175,6 +142,77 @@ extract_sds <- function(chains, data, pathogens){
   
   return(sds)
 }
+
+
+#----- Extract gaussian means
+extract_mu <- function(chains, data, pathogens){
+  
+  
+  # label combination positives
+  pos <- rep('neg', data$nC)
+  for(c in 1:data$nC){
+    np <- sum(data$infM[c,])
+    if(np==1) pos[c] <- pathogens[which(data$infM[c,]==1)]
+    else if(np>1) pos[c] <- paste(pathogens[which(data$infM[c,]==1)], sep='&', collapse="&")
+  }
+  
+  # all gaussian means
+  mus0 <- data.frame(pg=rep(NA,length(which(data$infM==0))), pos=NA, med=NA, ciL=NA, ciU=NA)
+  mus1 <- data.frame(pg=rep(NA,length(which(data$infM==1))), pos=NA, med=NA, ciL=NA, ciU=NA)
+  ix0 <- 1
+  ix1 <- 1
+  for(c in 1:data$nC) for(p in 1:data$nP){
+    if(data$infM[c,p]==0){
+      mus0$pg[ix0] <- pathogens[p]
+      mus0$pos[ix0] <- pos[c] 
+      y <- paste(c,p, sep=',')
+      mus0[ix0,3:5] <- quantile(chains[,paste(paste('mu[',y,sep=''),']',sep='')], c(0.5,0.025,0.975))
+      ix0 <- ix0+1
+    }else{
+      mus1$pg[ix1] <- pathogens[p]
+      mus1$pos[ix1] <- pos[c] 
+      y <- paste(c,p, sep=',')
+      mus1[ix1,3:5] <- quantile(chains[,paste(paste('mu[',y,sep=''),']',sep='')], c(0.5,0.025,0.975))
+      ix1 <- ix1+1
+    }
+  }
+  colnames(mus0)[1] <- 'antigen'
+  colnames(mus1)[1] <- 'antigen'
+  
+  return(list(mus0=mus0, mus1=mus1))
+}
+
+extract_phi <- function(chains, data, pathogens){
+  
+  phi <- data.frame(pos=NA, neg=NA, med=NA, ciL=NA, ciU=NA)
+  ind <- 1
+  for(p in 1:data$nPp) for(p2 in 1:data$nP){
+    if(!p==p2){
+      phi[ind,1:2] <- c(pathogens[p], pathogens[p2])
+      y <- str_replace_all(toString(c(p,p2))," ","")
+      phi[ind,3:5] <- quantile(chains[,paste('CR[', paste(y, ']', sep=''), sep='')], c(0.5,0.025,0.975))
+      ind <- ind+1
+    }
+  }
+  
+  rho <- data.frame(pars=c('rho00'), med=NA, ciL=NA, ciU=NA)
+  rho[1,2:4] <- quantile(chains[,paste('rho00')], c(0.5,0.025,0.975))
+  
+  return(list(phi=phi,rho=rho))
+  
+}
+
+extract_sero <- function(chains, data, pathogens){
+  
+  sero <- data.frame(pathogen=pathogens, med=NA, ciL=NA, ciU=NA)
+  
+  for(p in 1:data$nP) sero[p,2:4] <- quantile(chains[,paste('seroAll[', paste(p,']', sep=''), sep='')], c(0.5,0.025,0.975))
+  sero <- sero[!sero$med==0, ]
+  
+  return(sero)
+}
+
+
 
 #----- Plot gaussian distribution fits
 plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
@@ -374,75 +412,6 @@ plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
   
   # return plots
   return(list(fit=fitD,fitPN=fitDPN)) 
-}
-
-
-#----- Extract gaussian means
-extract_mu <- function(chains, data, pathogens){
-  
-  
-  # label combination positives
-  pos <- rep('neg', data$nC)
-  for(c in 1:data$nC){
-    np <- sum(data$infM[c,])
-    if(np==1) pos[c] <- pathogens[which(data$infM[c,]==1)]
-    else if(np>1) pos[c] <- paste(pathogens[which(data$infM[c,]==1)], sep='&', collapse="&")
-  }
-  
-  # all gaussian means
-  mus0 <- data.frame(pg=rep(NA,length(which(data$infM==0))), pos=NA, med=NA, ciL=NA, ciU=NA)
-  mus1 <- data.frame(pg=rep(NA,length(which(data$infM==1))), pos=NA, med=NA, ciL=NA, ciU=NA)
-  ix0 <- 1
-  ix1 <- 1
-  for(c in 1:data$nC) for(p in 1:data$nP){
-    if(data$infM[c,p]==0){
-      mus0$pg[ix0] <- pathogens[p]
-      mus0$pos[ix0] <- pos[c] 
-      y <- paste(c,p, sep=',')
-      mus0[ix0,3:5] <- quantile(chains[,paste(paste('mu[',y,sep=''),']',sep='')], c(0.5,0.025,0.975))
-      ix0 <- ix0+1
-    }else{
-      mus1$pg[ix1] <- pathogens[p]
-      mus1$pos[ix1] <- pos[c] 
-      y <- paste(c,p, sep=',')
-      mus1[ix1,3:5] <- quantile(chains[,paste(paste('mu[',y,sep=''),']',sep='')], c(0.5,0.025,0.975))
-      ix1 <- ix1+1
-    }
-  }
-  colnames(mus0)[1] <- 'antigen'
-  colnames(mus1)[1] <- 'antigen'
-  
-  return(list(mus0=mus0, mus1=mus1))
-}
-
-extract_phi <- function(chains, data, pathogens){
-  
-  phi <- data.frame(pos=NA, neg=NA, med=NA, ciL=NA, ciU=NA)
-  ind <- 1
-  for(p in 1:data$nPp) for(p2 in 1:data$nP){
-    if(!p==p2){
-      phi[ind,1:2] <- c(pathogens[p], pathogens[p2])
-      y <- str_replace_all(toString(c(p,p2))," ","")
-      phi[ind,3:5] <- quantile(chains[,paste('CR[', paste(y, ']', sep=''), sep='')], c(0.5,0.025,0.975))
-      ind <- ind+1
-    }
-  }
-  
-  rho <- data.frame(pars=c('rho00'), med=NA, ciL=NA, ciU=NA)
-  rho[1,2:4] <- quantile(chains[,paste('rho00')], c(0.5,0.025,0.975))
-  
-  return(list(phi=phi,rho=rho))
-  
-}
-
-extract_sero <- function(chains, data, pathogens){
-  
-  sero <- data.frame(pathogen=pathogens, med=NA, ciL=NA, ciU=NA)
-  
-  for(p in 1:data$nP) sero[p,2:4] <- quantile(chains[,paste('seroAll[', paste(p,']', sep=''), sep='')], c(0.5,0.025,0.975))
-  sero <- sero[!sero$med==0, ]
-  
-  return(sero)
 }
 
 

@@ -814,7 +814,7 @@ calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, 
 
 
 
-    if (length(tmp) > 10) {
+    if (length(tmp) > 5) {
       prop_pos[i, 1] <- mean(data[[positive_col]][tmp], na.rm = TRUE)
       a <- prop.test(sum(data[[positive_col]][tmp]), length(tmp))
       prop_pos[i, 2:3] <- a$conf.int
