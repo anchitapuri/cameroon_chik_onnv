@@ -582,6 +582,175 @@ summary(df_onnv_pop$log_model)
 
 
 
+# vectors + CHIK and ONNV all in one plot 
+virus_colors <- c(
+  CHIK = "#2e86ab",
+  ONNV = "#b31459"
+)
+
+# ── Binning for all 4 vectors ─────────────────────────────────────────────────
+aegmax <- seq(0, 1, 0.1); aegmin <- pmax(aegmax - 0.5, 0)
+anoph_max <- seq(0, 1, 0.1); anoph_min <- pmax(anoph_max - 0.5, 0)
+
+# Aegypti
+df_aeg_chik_multisero <- calculate_prop_by_variable(meta_data_with_labels, "aeg_pw_district", "CHIK_pos", aegmax, aegmin)
+df_aeg_onnv_multisero <- calculate_prop_by_variable(meta_data_with_labels, "aeg_pw_district", "ONNV_pos", aegmax, aegmin)
+
+# Albopictus
+df_alb_chik_multisero <- calculate_prop_by_variable(meta_data_with_labels, "alb_pw_district", "CHIK_pos", aegmax, aegmin)
+df_alb_onnv_multisero <- calculate_prop_by_variable(meta_data_with_labels, "alb_pw_district", "ONNV_pos", aegmax, aegmin)
+
+# Funestus
+df_fun_chik_multisero <- calculate_prop_by_variable(meta_data_with_labels, "fun_pw_district", "CHIK_pos", anoph_max, anoph_min)
+df_fun_onnv_multisero <- calculate_prop_by_variable(meta_data_with_labels, "fun_pw_district", "ONNV_pos", anoph_max, anoph_min)
+
+# Gambiae
+df_gam_chik_multisero <- calculate_prop_by_variable(meta_data_with_labels, "gam_pw_district", "CHIK_pos", anoph_max, anoph_min)
+df_gam_onnv_multisero <- calculate_prop_by_variable(meta_data_with_labels, "gam_pw_district", "ONNV_pos", anoph_max, anoph_min)
+
+
+# ── Plot function: histogram on top, CHIK + ONNV overlaid on scatter ──────────
+make_plot_multi_virus <- function(obs_chik, obs_onnv,
+                                  raw_data,
+                                  xlab,
+                                  ylim_upper = 0.4,
+                                  colors = virus_colors) {
+
+  # Combine obs into one long dataframe
+  combined <- dplyr::bind_rows(
+    obs_chik %>%
+      dplyr::filter(!is.nan(x)) %>%
+      dplyr::mutate(
+        virus = "CHIK",
+        ymin  = pmax(ymin, 0),
+        ymax  = pmin(ymax, ylim_upper)
+      ),
+    obs_onnv %>%
+      dplyr::filter(!is.nan(x)) %>%
+      dplyr::mutate(
+        virus = "ONNV",
+        ymin  = pmax(ymin, 0),
+        ymax  = pmin(ymax, ylim_upper)
+      )
+  )
+  combined$virus <- factor(combined$virus, levels = names(colors))
+
+  hist_df <- data.frame(x = as.numeric(raw_data))
+  hist_df <- hist_df[!is.na(hist_df$x), , drop = FALSE]
+
+  x_scale <- scale_x_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.25),
+    labels = c("0", "0.25", "0.5", "0.75", "1"),
+    expand = c(0, 0)
+  )
+
+  # Histogram — neutral grey since it covers both viruses
+  plot_hist <- ggplot(hist_df, aes(x = x)) +
+    geom_histogram(fill = "grey60", alpha = 0.6, bins = 30, color = NA) +
+    x_scale +
+    labs(x = NULL, y = NULL) +
+    base_theme +
+    theme(
+      axis.text.x  = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.margin  = margin(t = 6, r = 4, b = 0, l = 4)
+    )
+
+  # Scatter with CHIK + ONNV overlaid
+  plot_scatter <- ggplot(combined, aes(x = x, y = y, color = virus)) +
+    geom_point(size = 4, alpha = 0.9) +
+    geom_errorbar(
+      aes(ymin = ymin, ymax = ymax),
+      width = 0, alpha = 0.6, linewidth = 0.6
+    ) +
+    scale_color_manual(values = colors, name = NULL) +
+    x_scale +
+    coord_cartesian(ylim = c(0, 0.4), expand = FALSE) +
+    scale_y_continuous(breaks = seq(0, 0.4, 0.1),) +
+    labs(x = xlab, y = "Proportion positive") +
+    theme(
+      plot.margin    = margin(t = 10, r = 4, b = 12, l = 4),
+      legend.position = "bottom", 
+      axis.text.x = element_text(size = 20),
+      axis.text.y = element_text(size = 20),
+      axis.title.x = element_text(size = 18),
+      axis.title.y = element_blank(),
+      panel.grid = element_blank(),
+      panel.background = element_blank(),
+      panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.8)
+
+    )
+
+  plot_hist / plot_scatter +
+    patchwork::plot_layout(heights = c(2, 4))
+}
+
+
+# ── Build 4 plots ─────────────────────────────────────────────────────────────
+prop_aeg_prev <- make_plot_multi_virus(
+  df_aeg_chik_multisero$obs, df_aeg_onnv_multisero$obs,
+  meta_data_with_labels$aeg_pw_district,
+  xlab = "Proportion \nAedes aegypti"
+)
+
+prop_alb_prev <- make_plot_multi_virus(
+  df_alb_chik_multisero$obs, df_alb_onnv_multisero$obs,
+  meta_data_with_labels$alb_pw_district,
+  xlab = "Proportion \nAedes albopictus"
+)
+
+prop_fun_prev <- make_plot_multi_virus(
+  df_fun_chik_multisero$obs, df_fun_onnv_multisero$obs,
+  meta_data_with_labels$fun_pw_district,
+  xlab = "Proportion \nAnopheles funestus"
+)
+
+prop_gam_prev <- make_plot_multi_virus(
+  df_gam_chik_multisero$obs, df_gam_onnv_multisero$obs,
+  meta_data_with_labels$gam_pw_district,
+  xlab = "Proportion \nAnopheles gambiae"
+)
+
+
+# ── Arrange 2×2 with shared legend ───────────────────────────────────────────
+multisero_mosquito_pos_plots <- patchwork::wrap_plots(
+  prop_aeg_prev, prop_alb_prev,
+  prop_fun_prev, prop_gam_prev,
+  ncol = 4
+) +
+  patchwork::plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+
+# save plots 
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/multisero_mosquito_pos_plots.png", 
+       plot = multisero_mosquito_pos_plots,
+       width = 12, 
+       height = 5, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # --- Multisero probs with mosquito distributions 
 
@@ -623,6 +792,8 @@ df_albopictus <- calculate_prop_by_variable_multisero_probs(
   pathogen_col = 'a',  # a = ONNV
   breaks_max = aegmax, 
   breaks_min = aegmin)
+
+
 
 
 

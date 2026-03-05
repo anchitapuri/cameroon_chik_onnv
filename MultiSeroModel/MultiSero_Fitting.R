@@ -36,6 +36,7 @@ set_cmdstan_path(cmdstan_path)
 model_path = "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/Final_MultiSero.stan"
 mod = cmdstan_model(model_path, pedantic=FALSE)
 
+
 # Import data file 
 meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv')
 nrow(meta_data)
@@ -103,7 +104,7 @@ preprocessed_data_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis
 
 #--- Fit full model 
 ini <- init(preprocessed_data_full_model$data, nChains = 3)
-ini
+
 
 fit_full_model <- mod$sample(
 data = preprocessed_data_full_model$data, 
@@ -325,39 +326,214 @@ print(phi)
 
 
 
+
+# CHIK vs ONNV correlation plot 
+quartz()
+plot(full_model_alpha$ONNV_VLP_log, full_model_alpha$CHIKV_sE2_log,col = "#003c8b", pch = 16, xlab = "Log (ONNV VLP MFI)", ylab = "Log (CHIK sE2 MFI)")
+
+
 # 2) Compare multisero model estimates to 2D Mixture model fits 
 # ---- Fit CHIK  - using 50% for comp2
 fmm_normal_chik <- mixfit(full_model_alpha$CHIKV_sE2_log, ncomp = 2, family="normal")
-quartz()
 plot(fmm_normal_chik)
+pred.dat_normal_chik <-cbind(fmm_normal_chik$data, fmm_normal_chik$comp.prob)
+chik_positive_normal <- ifelse(pred.dat_normal_chik[, 3] > 0.5, "1", "0")
+table(chik_positive_normal)
 
-mixture_model_chik_data <- meta_data_full_model
-mixture_model_chik_data$CHIK_pos_mixture_model <- as.numeric(ifelse(fmm_normal_chik$comp.prob[, 2] > 0.5, "1", "0"))
-table(mixture_model_chik_data$CHIK_pos_mixture_model)
+
+# ---- Fit ONNV  - using 50% for comp2
+fmm_normal_onnv <- mixfit(full_model_alpha$ONNV_VLP_log, ncomp = 2, family="normal")
+#define threshold to get onnv+ve and onnv-ve
+pred.dat_normal_onnv <- cbind(fmm_normal_onnv$data, fmm_normal_onnv$comp.prob)
+onnv_positive_normal <- ifelse(pred.dat_normal_onnv[, 3] > 0.5, "1", "0")
+table(onnv_positive_normal)
+
+
+# ---- Fit MAYV  - using 50% for comp2
+fmm_normal_mayv <- mixfit(full_model_alpha$MAYV_E2_log, ncomp = 2, family="normal")
+plot(fmm_normal_mayv)
+#define threshold to get chik+ve and chik-ve
+pred.dat_normal_mayv<-cbind(fmm_normal_mayv$data, fmm_normal_mayv$comp.prob)
+mayv_positive_normal <- ifelse(pred.dat_normal_mayv[, 3] > 0.5, "1", "0")
+table(mayv_positive_normal)
+
+
+#all mixture model plots 
+chik <- plot(fmm_normal_chik) +  theme(axis.text.x = element_text(size = 14),
+          axis.text.y = element_text(size = 14),
+          panel.grid = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank())  
+        
+onnv <- plot(fmm_normal_onnv) +  theme(axis.text.x = element_text(size = 14),
+          axis.text.y = element_text(size = 14),
+          panel.grid = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank()) 
+
+mayv <- plot(fmm_normal_mayv) +  theme(axis.text.x = element_text(size = 14),
+          axis.text.y = element_text(size = 14),
+          panel.grid = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank())
+
+mixture_models_fits <- chik + onnv + mayv 
+# save plots 
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/mixture_models_fits.png", 
+       plot = mixture_models_fits,
+       width = 15, 
+       height = 5, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
+
+
+
+
+# 2D mixture model fits with 50% threshold for comp2
+mixture_model_data <- meta_data_full_model
+mixture_model_data$CHIK_pos_mixture_model <- as.numeric(ifelse(fmm_normal_chik$comp.prob[, 2] > 0.5, "1", "0"))
+mixture_model_data$ONNV_pos_mixture_model <- as.numeric(ifelse(fmm_normal_onnv$comp.prob[, 2] > 0.5, "1", "0"))
+mixture_model_data$MAYV_pos_mixture_model <- as.numeric(ifelse(fmm_normal_mayv$comp.prob[, 2] > 0.5, "1", "0"))
 
 
 aegmax <- seq(0,1,0.1)
 aegmin <- aegmax - 0.5
 aegmin[which(aegmin<0)] <- 0
+
+anoph_max <- seq(0, 1, 0.1)
+anoph_min <- anoph_max - 0.5
+anoph_min[which(anoph_min < 0)] <- 0
+
+virus_colors <- c(
+  CHIK = "#2e86ab",
+  ONNV = "#b31459",
+  MAYV = "#55038c"
+)
+
+# ── Run calculate_prop_by_variable for all vector × virus combinations ────────
 # Aegypti
-df_aegypti_chik_mixture_model <- calculate_prop_by_variable(
-  data = mixture_model_chik_data, 
-  var_col = "aeg_pw_district", 
-  positive_col = "CHIK_pos_mixture_model",
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
+df_aeg_chik <- calculate_prop_by_variable(mixture_model_data, "aeg_pw_district", "CHIK_pos_mixture_model", aegmax, aegmin)
+df_aeg_onnv <- calculate_prop_by_variable(mixture_model_data, "aeg_pw_district", "ONNV_pos_mixture_model", aegmax, aegmin)
+df_aeg_mayv <- calculate_prop_by_variable(mixture_model_data, "aeg_pw_district", "MAYV_pos_mixture_model", aegmax, aegmin)
 
-  # Albopictus
-df_albopictus_chik_mixture_model <- calculate_prop_by_variable(
-  data = mixture_model_chik_data, 
-  var_col = "alb_pw_district", 
-  positive_col = "CHIK_pos_mixture_model",
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
+# Albopictus
+df_alb_chik <- calculate_prop_by_variable(mixture_model_data, "alb_pw_district", "CHIK_pos_mixture_model", aegmax, aegmin)
+df_alb_onnv <- calculate_prop_by_variable(mixture_model_data, "alb_pw_district", "ONNV_pos_mixture_model", aegmax, aegmin)
+df_alb_mayv <- calculate_prop_by_variable(mixture_model_data, "alb_pw_district", "MAYV_pos_mixture_model", aegmax, aegmin)
+
+# Funestus — update breaks if different from aeg
+df_fun_chik <- calculate_prop_by_variable(mixture_model_data, "fun_pw_district", "CHIK_pos_mixture_model", anoph_max, anoph_min)
+df_fun_onnv <- calculate_prop_by_variable(mixture_model_data, "fun_pw_district", "ONNV_pos_mixture_model", anoph_max, anoph_min)
+df_fun_mayv <- calculate_prop_by_variable(mixture_model_data, "fun_pw_district", "MAYV_pos_mixture_model", anoph_max, anoph_min)
+
+# Gambiae — update breaks if different from aeg
+df_gam_chik <- calculate_prop_by_variable(mixture_model_data, "gam_pw_district", "CHIK_pos_mixture_model", anoph_max, anoph_min)
+df_gam_onnv <- calculate_prop_by_variable(mixture_model_data, "gam_pw_district", "ONNV_pos_mixture_model", anoph_max, anoph_min)
+df_gam_mayv <- calculate_prop_by_variable(mixture_model_data, "gam_pw_district", "MAYV_pos_mixture_model", anoph_max, anoph_min)
+
+
+# ── Plot function: 3 viruses overlaid on one set of axes ─────────────────────
+plot_vector_multi_virus <- function(obs_chik, obs_onnv, obs_mayv,
+                                    xlab,
+                                    colors = virus_colors) {
+  
+  # Combine the 3 obs dataframes, tagging each with its virus label
+  combined <- dplyr::bind_rows(
+    obs_chik %>% dplyr::filter(!is.nan(x)) %>% dplyr::mutate(virus = "CHIK"),
+    obs_onnv %>% dplyr::filter(!is.nan(x)) %>% dplyr::mutate(virus = "ONNV"),
+    obs_mayv %>% dplyr::filter(!is.nan(x)) %>% dplyr::mutate(virus = "MAYV")
+  )
+  combined$virus <- factor(combined$virus, levels = names(colors))
+
+  ggplot(combined, aes(x = x, y = y, color = virus)) +
+    geom_point(size = 4, alpha = 0.9) +
+    geom_errorbar(
+      aes(ymin = ymin, ymax = ymax),
+      width = 0, alpha = 0.6, linewidth = 0.6
+    ) +
+    scale_color_manual(
+      values = colors,
+      name   = NULL
+    ) +
+    scale_x_continuous(
+      limits = c(0, 1),
+      breaks = seq(0, 1, 0.25),
+      labels = c("0", "0.25", "0.5", "0.75", "1"),
+      expand = c(0, 0)
+    ) +
+    coord_cartesian(ylim = c(0,0.8), expand = FALSE) +
+    scale_y_continuous(breaks = seq(0, 0.8, 0.2)) +
+    labs(x = xlab, y = "Proportion positive") +
+    theme(
+      plot.margin    = margin(t = 10, r = 14, b = 12, l = 14),
+      legend.position = "bottom", 
+      axis.text.x = element_text(size = 20),
+      axis.text.y = element_text(size = 20),
+      axis.title.x = element_text(size = 18),
+      axis.title.y = element_blank(),
+      panel.grid = element_blank(),
+      panel.background = element_blank(),
+      panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.8)
+    )
+}
+
+
+# ── Build the 4 plots ─────────────────────────────────────────────────────────
+prop_aeg_prev <- plot_vector_multi_virus(
+  obs_chik = df_aeg_chik$obs,
+  obs_onnv = df_aeg_onnv$obs,
+  obs_mayv = df_aeg_mayv$obs,
+  xlab     = "Proportion Aedes aegypti"
+)
+
+prop_alb_prev <- plot_vector_multi_virus(
+  obs_chik = df_alb_chik$obs,
+  obs_onnv = df_alb_onnv$obs,
+  obs_mayv = df_alb_mayv$obs,
+  xlab     = "Proportion Aedes albopictus"
+)
+
+prop_fun_prev <- plot_vector_multi_virus(
+  obs_chik = df_fun_chik$obs,
+  obs_onnv = df_fun_onnv$obs,
+   obs_mayv = df_fun_mayv$obs,
+  xlab     = "Proportion Anopheles funestus"
+)
+
+prop_gam_prev <- plot_vector_multi_virus(
+  obs_chik = df_gam_chik$obs,
+  obs_onnv = df_gam_onnv$obs,
+  obs_mayv = df_gam_mayv$obs,
+  xlab     = "Proportion Anopheles gambiae"
+)
 
 
 
-plot_chik_2d_model <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
+mosquito_pos_plots <- (prop_aeg_prev | prop_alb_prev) / (prop_fun_prev | prop_gam_prev) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+
+# save plots 
+ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/mosquito_pos_plots.png", 
+       plot = mosquito_pos_plots,
+       width = 10, 
+       height = 8, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
+
+
+
+
+
+
+
+
+
+
+plot_vector_with_2d_model <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
 
   ylab <- paste0("Proportion ", gsub("_pos", "", pos_col), "positive")
 
@@ -390,6 +566,7 @@ plot_chik_2d_model <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_po
     return(plot_scatter)
 }
 
+colnames(mixture_model_data)
 
 prop_aeg_prev_chik <- plot_chik_2d_model(
   df_aegypti_chik_mixture_model$obs,
@@ -423,42 +600,11 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/Fig1.png",
        dpi = 300,
        bg = "white")
 
-#define threshold to get chik+ve and chik-ve
-pred.dat_normal_chik <-cbind(fmm_normal_chik$data, fmm_normal_chik$comp.prob)
-chik_positive_normal <- ifelse(pred.dat_normal_chik[, 3] > 0.5, "1", "0")
-table(chik_positive_normal)
-
-
-# ---- Fit ONNV  - using 50% for comp2
-fmm_normal_onnv <- mixfit(full_model_alpha$ONNV_VLP_log, ncomp = 2, family="normal")
-plot(fmm_normal_onnv)
-#define threshold to get onnv+ve and onnv-ve
-pred.dat_normal_onnv <- cbind(fmm_normal_onnv$data, fmm_normal_onnv$comp.prob)
-onnv_positive_normal <- ifelse(pred.dat_normal_onnv[, 3] > 0.5, "1", "0")
-table(onnv_positive_normal)
-
-
-# ---- Fit MAYV  - using 50% for comp2
-fmm_normal_mayv <- mixfit(full_model_alpha$MAYV_E2_log, ncomp = 2, family="normal")
-plot(fmm_normal_mayv)
-#define threshold to get chik+ve and chik-ve
-pred.dat_normal_mayv<-cbind(fmm_normal_mayv$data, fmm_normal_mayv$comp.prob)
-mayv_positive_normal <- ifelse(pred.dat_normal_mayv[, 3] > 0.5, "1", "0")
-table(mayv_positive_normal)
 
 
 
-# CHIK vs ONNV correlation plot 
-quartz()
-plot(full_model_alpha$ONNV_VLP_log, full_model_alpha$CHIKV_sE2_log,col = "#003c8b", pch = 16, xlab = "Log (ONNV VLP MFI)", ylab = "Log (CHIK sE2 MFI)")
 
 
-
-min(full_model_alpha$ONNV_VLP_log)
-min(full_model_alpha$CHIKV_sE2_log)
-
-max(full_model_alpha$ONNV_VLP_log)
-max(full_model_alpha$CHIKV_sE2_log)
 
 
 
@@ -471,3 +617,23 @@ lli <- data.frame(model = c('Full Model', 'Naive Model'),
 lli[1, 3:5] <- quantile(chains_df$sumloglik,c(0.5, 0.025, 0.975))
 lli[2, 3:5] <- quantile(chains_df_naive_model$sumloglik, c(0.5, 0.025, 0.975))
 lli
+
+
+
+# Aegypti
+df_aegypti_chik_mixture_model <- calculate_prop_by_variable(
+  data = mixture_model_chik_data, 
+  var_col = "aeg_pw_district", 
+  positive_col = "CHIK_pos_mixture_model",
+  breaks_max = aegmax, 
+  breaks_min = aegmin)
+
+  # Albopictus
+df_albopictus_chik_mixture_model <- calculate_prop_by_variable(
+  data = mixture_model_chik_data, 
+  var_col = "alb_pw_district", 
+  positive_col = "CHIK_pos_mixture_model",
+  breaks_max = aegmax, 
+  breaks_min = aegmin)
+
+

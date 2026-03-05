@@ -111,6 +111,7 @@ onnv_results_pop_grid <- run_inla(
 # --- Save best model results 
 saveRDS(onnv_results_pop_grid, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/ONNV_INLAResults.rds')
 
+onnv_results_pop_grid <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/ONNV_INLAResults.rds')
 
 # --- ESTIMATED LOCATION CALCULATIONS BY REGION ----
 index_est <- inla.stack.index(onnv_results_pop_grid$stk.full, tag = "est")$data
@@ -181,7 +182,7 @@ est_cameroonwide_foi <- list(
   ciL  = exp(foi_summary$`0.025quant`),
   ciU  = exp(foi_summary$`0.975quant`)
 )
-est_cameroonwide_foi
+
 
 # -- cameroon wide summary 
 compute_foi_metrics <- function(foi_val, age_groups, w_age, cam_pop, total_cameroon_pop) {
@@ -286,10 +287,6 @@ infections_onnv <- plot_predicted_annual_infections(
 )
 
 
-infections_onnv$total_infections  # Total infections across all locations
-infections_onnv$susceptible_people  # Breakdown by age group
-infections_onnv$seropositive_people  # Min and max by location
-
 # combined plots 
 maps <- foi_onnv$plot + sero_onnv$plot + infections_onnv$plot 
 
@@ -340,3 +337,42 @@ infection_region <- aggregate_predictions_by_region(
   agg_type   = "sum"
 )
 print(infection_region)
+
+
+
+
+# Discussion - prob of disease,  acute cases, arthralgic cases and  deaths per year occur in Cameroon each year
+
+average_annual_infections <- metrics_mean$infections
+ciL_annual_infections <- metrics_ciL$infections
+ciU_annual_infections <- metrics_ciU$infections
+prob_disease <- 0.5 # assuming same as CHIKV
+prob_mild <- 0.88 # Given disease, probability of it being mild (from Gabrial paper)
+prob_severe <- 0.12  # Given disease, probability of it being severe (from Gabrial paper)
+prob_medically_attended <- 1.13
+prob_chronic_given_severe <- 0.44 #  Kang et al 
+
+# acute cases 
+acute_cases <- average_annual_infections * prob_disease 
+acute_cases_ciL <- ciL_annual_infections * prob_disease 
+acute_cases_ciU <- ciU_annual_infections * prob_disease 
+
+cat("Estimated number of acute cases per year:", acute_cases, "(", acute_cases_ciL, ",", acute_cases_ciU, ")\n")
+
+# chronic arthlgic cases
+#arthralgic_cases  <- average_annual_infections * prob_disease * prob_severe * prob_chronic_given_severe
+#arthralgic_cases_ciL  <- ciL_annual_infections * prob_disease * prob_severe * prob_chronic_given_severe
+#arthralgic_cases_ciU  <- ciU_annual_infections * prob_disease * prob_severe * prob_chronic_given_severe
+
+arthralgic_cases  <- average_annual_infections * prob_disease * prob_medically_attended/2 
+
+
+cat("Estimated number of arthralgic cases per year:", arthralgic_cases)
+
+prob_ifr <- 4.2 * 10^-5 #in Brazil, 
+
+death <- average_annual_infections * prob_disease * prob_ifr
+death_ciL <- ciL_annual_infections * prob_disease * prob_ifr
+death_ciU <- ciU_annual_infections * prob_disease * prob_ifr
+
+cat("Estimated number of deaths per year:", death, "(", death_ciL, ",", death_ciU, ")\n")
