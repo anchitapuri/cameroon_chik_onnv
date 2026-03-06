@@ -22,6 +22,7 @@ parameters {
  real <lower=0,upper=1> rho00; // correlation in neg titers
 }
 
+
 transformed parameters {
   array[nC] vector[nP] mu; // gaussian means
   array[nC] vector[nP] sigma; // gaussian sds
@@ -33,12 +34,11 @@ transformed parameters {
   array[nC] cov_matrix[nP] covM; // covariance matrices
   {
     
-    // some temp variables
+  // some temp variables
   array[nC] vector[nP] W;
   vector[nC] log_theta;
   int ix = 1;
   real cv;
-  //real sig;
 
 
   //--- gaussian weights ---//
@@ -141,13 +141,12 @@ transformed parameters {
   //--- likelihood calculation ---//
   for(c in 1:nC) for(n in 1:N) pC[n,c] = log_theta[c] + multi_normal_lpdf(y[n] | mu[c], covM[c]);
   for(n in 1:N) log_lik[n] = log_sum_exp(pC[n,]);
-  
   }
 }
 
 
+
 model {
-// More data-informed priors
   sero ~ beta(1,5);
   mu0 ~ normal(5, 0.5); 
   mu1 ~ normal(2.5, 0.1);

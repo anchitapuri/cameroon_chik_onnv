@@ -4,7 +4,6 @@ library(matrixStats)
 library(mvtnorm)
 library(matrixcalc)
 library(here)
-#----- Functions for multivariate Gaussian mixture serology model -----#
 library(emdbook)
 library(ggplot2)
 library(cowplot)

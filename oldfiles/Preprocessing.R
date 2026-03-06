@@ -24,7 +24,6 @@ library(ggspatial)
 library(patchwork)
 
 # --- Read data files 
-
 # original data
 meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/base_complete_MFI_meta.csv')
 nrow(meta_data)
@@ -203,11 +202,6 @@ cam_shapefile_districts_unique <- cam_shapefile_districts_merged %>%
   group_by(shapefile_district_lower) %>%
   slice(1) %>%  # Just take the first geometry for each district
   ungroup()
-
-
-# shapefile 1 and 2 mergerd 
-saveRDS(cam_shapefile_districts_merged, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/cam_shapefile_districts_merged.rds")
-
 
 
 # --- Check the remianing istricts in meta_data but NOT in shapefile
@@ -509,6 +503,7 @@ nrow(sf_meta_data_with_coords_pw_filtered)
 nrow(sf_meta_data_with_coords_pw_filtered)  # should be 6324
 length(unique(sf_meta_data_with_coords_pw_filtered$geometry))
 length(unique(sf_meta_data_with_coords_pw_filtered$district_lower))
+
 
 saveRDS(sf_meta_data_with_coords_pw_filtered, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
 
