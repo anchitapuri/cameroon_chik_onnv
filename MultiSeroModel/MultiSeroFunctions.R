@@ -213,7 +213,6 @@ extract_sero <- function(chains, data, pathogens){
 }
 
 
-
 #----- Plot gaussian distribution fits
 plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
   
@@ -244,67 +243,76 @@ plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
       
       # Check if we should show cross-reactive for this pathogen
       show_cr <- !is.null(show_crossreactive_for) && p %in% show_crossreactive_for
+       
+      ## Positive component
+      if(data$pres[p] == 1){
+        z <- which(data$infM[, p] == 1)
+        pw <- numeric(length(z))
+        for(s in seq_along(z)) {
+          pw[s] <- chains[i, paste0("theta[", z[s], "]")]
+        }
+        propP <- sum(data$N * pw) / data$N
+        
+        ypP[[p]][, i] <- density(
+          yc[yc$C %in% z, p],
+          bw = 0.01, from = -2.5, to = 12
+        )$y * propP
+      } else {
+        propP <- 0
+        ypP[[p]][, i] <- rep(0, 512)
+      }
+
       
-      if(data$pres[p]==1){
-        z <- which(data$infM[,p]==1)
-        pw <- vector()
-        for(s in 1:length(z)) pw[s] <- chains[i,paste(paste('theta[',paste(z[s]),sep=''),']',sep='')] 
-        propP <- sum(data$N*pw)/data$N
+      if(show_cr){
+        # Split negatives into true negatives and cross-reactive negatives
+        neg_idx <- which(data$infM[,p]==0)
         
-        # Positive for this pathogen
-        ypP[[p]][,i] <- density(yc[yc$C %in% which(data$infM[,p]==1),p], bw=0.01, from=-2.5, to=12)$y * propP
+        # Cross-reactive negatives: negative for pathogen p but positive for at least one other pathogen
+        cross_reactive_idx <- neg_idx[rowSums(data$infM[neg_idx, , drop=FALSE]) > 0]
+        # True negatives: negative for all pathogens
+        true_neg_idx <- neg_idx[rowSums(data$infM[neg_idx, , drop=FALSE]) == 0]
         
-        if(show_cr){
-          # Split negatives into true negatives and cross-reactive negatives
-          neg_idx <- which(data$infM[,p]==0)
-          
-          # Cross-reactive negatives: negative for pathogen p but positive for at least one other pathogen
-          cross_reactive_idx <- neg_idx[rowSums(data$infM[neg_idx, , drop=FALSE]) > 0]
-          # True negatives: negative for all pathogens
-          true_neg_idx <- neg_idx[rowSums(data$infM[neg_idx, , drop=FALSE]) == 0]
-          
-          # Calculate proportions
-          pw_cross <- vector()
-          pw_true <- vector()
-          if(length(cross_reactive_idx) > 0){
-            for(s in 1:length(cross_reactive_idx)) pw_cross[s] <- chains[i,paste(paste('theta[',paste(cross_reactive_idx[s]),sep=''),']',sep='')]
-            propNcross <- sum(data$N*pw_cross)/data$N
-          } else {
-            propNcross <- 0
-          }
-          if(length(true_neg_idx) > 0){
-            for(s in 1:length(true_neg_idx)) pw_true[s] <- chains[i,paste(paste('theta[',paste(true_neg_idx[s]),sep=''),']',sep='')]
-            propNtrue <- sum(data$N*pw_true)/data$N
-          } else {
-            propNtrue <- 0
-          }
-          
-          # Density for cross-reactive negatives
-          if(length(cross_reactive_idx) > 0){
-            ypNcross[[p]][,i] <- density(yc[yc$C %in% cross_reactive_idx,p], bw=0.01, from=-2.5, to=12)$y * propNcross
-          } else {
-            ypNcross[[p]][,i] <- rep(0, 512)
-          }
-          
-          # Density for true negatives
-          if(length(true_neg_idx) > 0){
-            ypN[[p]][,i] <- density(yc[yc$C %in% true_neg_idx,p], bw=0.01, from=-2.5, to=12)$y * propNtrue
-          } else {
-            ypN[[p]][,i] <- rep(0, 512)
-          }
+        # Calculate proportions
+        pw_cross <- vector()
+        pw_true <- vector()
+        if(length(cross_reactive_idx) > 0){
+          for(s in 1:length(cross_reactive_idx)) pw_cross[s] <- chains[i,paste(paste('theta[',paste(cross_reactive_idx[s]),sep=''),']',sep='')]
+          propNcross <- sum(data$N*pw_cross)/data$N
         } else {
-          # No cross-reactive split, lump all negatives together
-          ypN[[p]][,i] <- density(yc[yc$C %in% which(data$infM[,p]==0),p], bw=0.01, from=-2.5, to=12)$y *(1-propP)
+          propNcross <- 0
+        }
+        if(length(true_neg_idx) > 0){
+          for(s in 1:length(true_neg_idx)) pw_true[s] <- chains[i,paste(paste('theta[',paste(true_neg_idx[s]),sep=''),']',sep='')]
+          propNtrue <- sum(data$N*pw_true)/data$N
+        } else {
+          propNtrue <- 0
+        }
+        
+        # Density for cross-reactive negatives
+        if(length(cross_reactive_idx) > 0){
+          ypNcross[[p]][,i] <- density(yc[yc$C %in% cross_reactive_idx,p], bw=0.01, from=-2.5, to=12)$y * propNcross
+        } else {
           ypNcross[[p]][,i] <- rep(0, 512)
         }
         
-      }else{
-        ypN[[p]][,i] <- density(yc[yc$C %in% which(data$infM[,p]==0),p], bw=0.01, from=-2.5, to=12)$y
-        ypNcross[[p]][,i] <- rep(0, 512)
+        # Density for true negatives
+        if(length(true_neg_idx) > 0){
+          ypN[[p]][,i] <- density(yc[yc$C %in% true_neg_idx,p], bw=0.01, from=-2.5, to=12)$y * propNtrue
+        } else {
+          ypN[[p]][,i] <- rep(0, 512)
+        }
+       } else {
+        neg_idx <- which(data$infM[, p] == 0)
+        ypN[[p]][, i] <- density(
+          yc[yc$C %in% neg_idx, p],
+          bw = 0.01, from = -2.5, to = 12
+        )$y * (1 - propP)
+        
+        ypNcross[[p]][, i] <- rep(0, 512)
       }
     }
-  }
-  
+   }
+
   # quantiles of density distributions
   dpq <- dpqP <- dpqN <- dpqNcross <- list()
   titer <- density(yc[,1], bw=0.01, from=-2.5, to=12)$x

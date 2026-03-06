@@ -168,14 +168,16 @@ quartz()
 print(p1 + p2 + p3 + p4)
 
 
+seq_along(preprocessed_data_full_model$pathogens)
 
 # Plot fits (neg component, neg-CR component, pos component)
 distfits <- plot_fits(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens, show_crossreactive_for = seq_along(preprocessed_data_full_model$pathogens))
 quartz()
 distfits$fitPN 
 
+
 ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2b.png',
+  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/NEW_Fig2b.png',
   plot = distfits$fitPN,
   width = 10,
   height = 8,
@@ -277,6 +279,18 @@ meta_data$CHIK_pos <- as.integer(meta_data$cluster == 3)
 # plot to visualise distribution, coloured by label
 titres_plot <- plot_titres_coloured_by_clusters(meta_data)
 print(titres_plot)
+
+# After the plot_titres_coloured_by_clusters call, add this to identify and print probs for top 3 high CHIK points
+high_chik_indices <- order(meta_data$CHIKV_sE2, decreasing = TRUE)[1:3]
+high_chik_data <- meta_data[high_chik_indices, c("id", "CHIKV_sE2", "cluster", "cluster_prob")]
+print(high_chik_data)
+
+# To print the full probability vectors for these points
+for (i in high_chik_indices) {
+  cat("Sample ID:", meta_data$id[i], "\n")
+  print(prob_matrix[i, ])
+  cat("\n")
+}
 
 
 # -- Save figures and data with labels
@@ -636,4 +650,68 @@ df_albopictus_chik_mixture_model <- calculate_prop_by_variable(
   breaks_max = aegmax, 
   breaks_min = aegmin)
 
+
+
+
+
+
+p <- which(preprocessed_data_full_model$pathogens == "MAYV_E2_log")
+neg_idx <- which(preprocessed_data_full_model$data$infM[, p] == 0)
+
+cross_reactive_idx <- neg_idx[
+  rowSums(preprocessed_data_full_model$data$infM[neg_idx, , drop = FALSE]) > 0
+]
+
+true_neg_idx <- neg_idx[
+  rowSums(preprocessed_data_full_model$data$infM[neg_idx, , drop = FALSE]) == 0
+]
+
+cat("Cross-reactive rows:\n")
+print(cross_reactive_idx)
+
+cat("Corresponding infM rows:\n")
+print(preprocessed_data_full_model$data$infM[cross_reactive_idx, , drop = FALSE])
+
+i <- 1  # pick any iteration
+
+# simulate components exactly like inside your function
+covM <- extract_covM(chains_df, preprocessed_data_full_model$data)
+
+yy <- list()
+for (c in 1:preprocessed_data_full_model$data$nC) {
+  g <- paste('mu[', c, sep='')
+  muu <- sapply(1:preprocessed_data_full_model$data$nP, function(pp)
+    chains_df[i, paste0(g, ',', pp, ']')]
+  )
+
+  yy[[c]] <- as.data.frame(
+    rmvnorm(500, mean = muu, sigma = covM[[i]][[c]])
+  )
+  yy[[c]]$C <- c
+}
+
+yc <- do.call(rbind, yy)
+
+d_cr  <- density(yc[yc$C %in% cross_reactive_idx, p])
+d_tn  <- density(yc[yc$C %in% true_neg_idx, p])
+
+plot(d_tn, col="blue", main="MAYV component comparison")
+lines(d_cr, col="red")
+legend("topright", legend=c("True negative","Cross-reactive"),
+       col=c("blue","red"), lwd=2)
+
+
+infM <- preprocessed_data_full_model$data$infM
+colnames(infM) <- c("ONNV","CHIKV","MAYV")
+print(infM)
+
+p <- which(colnames(infM) == "MAYV")
+neg_idx <- which(infM[, p] == 0)
+cross_reactive_idx <- neg_idx[rowSums(infM[neg_idx, , drop = FALSE]) > 0]
+true_neg_idx <- neg_idx[rowSums(infM[neg_idx, , drop = FALSE]) == 0]
+
+cat("neg_idx:\n"); print(neg_idx)
+cat("cross_reactive_idx:\n"); print(cross_reactive_idx)
+cat("true_neg_idx:\n"); print(true_neg_idx)
+cat("cross-reactive infM rows:\n"); print(infM[cross_reactive_idx, , drop = FALSE])
 

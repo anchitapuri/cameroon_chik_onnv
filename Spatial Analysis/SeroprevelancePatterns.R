@@ -10,6 +10,7 @@ library(here)
 library(patchwork)
 library(cowplot)
 library(ggpubr)
+library(ggh4x)
 
 
 
@@ -609,14 +610,12 @@ df_gam_chik_multisero <- calculate_prop_by_variable(meta_data_with_labels, "gam_
 df_gam_onnv_multisero <- calculate_prop_by_variable(meta_data_with_labels, "gam_pw_district", "ONNV_pos", anoph_max, anoph_min)
 
 
-# ── Plot function: histogram on top, CHIK + ONNV overlaid on scatter ──────────
 make_plot_multi_virus <- function(obs_chik, obs_onnv,
                                   raw_data,
                                   xlab,
                                   ylim_upper = 0.4,
                                   colors = virus_colors) {
 
-  # Combine obs into one long dataframe
   combined <- dplyr::bind_rows(
     obs_chik %>%
       dplyr::filter(!is.nan(x)) %>%
@@ -645,109 +644,107 @@ make_plot_multi_virus <- function(obs_chik, obs_onnv,
     expand = c(0, 0)
   )
 
-  # Histogram — neutral grey since it covers both viruses
+  # Histogram (top panel, shared across both virus rows)
   plot_hist <- ggplot(hist_df, aes(x = x)) +
     geom_histogram(fill = "grey60", alpha = 0.6, bins = 30, color = NA) +
     x_scale +
     labs(x = NULL, y = NULL) +
-    base_theme +
     theme(
       axis.text.x  = element_blank(),
       axis.ticks.x = element_blank(),
-      plot.margin  = margin(t = 6, r = 4, b = 0, l = 4)
+      axis.text.y      = element_text(size = 14),
+      panel.grid       = element_blank(),
+      panel.background = element_blank(),
+      plot.margin  = margin(t = 0, r = 0, b = 0, l = 0)
     )
 
-  # Scatter with CHIK + ONNV overlaid
+  # Scatter — faceted by virus, each with free y scale
   plot_scatter <- ggplot(combined, aes(x = x, y = y, color = virus)) +
-    geom_point(size = 4, alpha = 0.9) +
+    geom_point(size = 3.5, alpha = 0.9) +
     geom_errorbar(
       aes(ymin = ymin, ymax = ymax),
       width = 0, alpha = 0.6, linewidth = 0.6
     ) +
     scale_color_manual(values = colors, name = NULL) +
     x_scale +
-    coord_cartesian(ylim = c(0, 0.4), expand = FALSE) +
-    scale_y_continuous(breaks = seq(0, 0.4, 0.1),) +
-    labs(x = xlab, y = "Proportion positive") +
+    # Free y scale so CHIK gets its own range rather than being squashed
+    facet_wrap(
+      ~virus,
+      ncol   = 1,
+      scales = "free_y") +
+     ggh4x::facetted_pos_scales(
+        y = list(
+        virus == "CHIK" ~ scale_y_continuous(limits = c(0, 0.05), breaks = seq(0, 0.05, 0.01)),
+        virus == "ONNV" ~ scale_y_continuous(limits = c(0, 0.4), breaks = seq(0, 0.4, 0.1))
+      )
+     ) +
+    labs(x = xlab, y = NULL) +
     theme(
-      plot.margin    = margin(t = 10, r = 4, b = 12, l = 4),
-      legend.position = "bottom", 
-      axis.text.x = element_text(size = 20),
-      axis.text.y = element_text(size = 20),
-      axis.title.x = element_text(size = 18),
-      axis.title.y = element_blank(),
-      panel.grid = element_blank(),
+      legend.position = "none",
+      plot.margin      = margin(t = 0, r = 4, b = 8, l = 4),
+      strip.background = element_blank(),
+      strip.text       = element_blank(),
+      strip.text.y     = element_blank(),
+      axis.text.x      = element_text(size = 16),
+      axis.text.y      = element_text(size = 14),
+      axis.title.x     = element_text(size = 16),
+      panel.grid       = element_blank(),
       panel.background = element_blank(),
-      panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.8)
-
+      panel.border     = element_rect(colour = "black", fill = NA, linewidth = 0.8),
+      panel.spacing    = unit(4, "pt")    # tighter gap between CHIK / ONNV panels
     )
 
   plot_hist / plot_scatter +
-    patchwork::plot_layout(heights = c(2, 4))
+    patchwork::plot_layout(heights = c(1, 4))   # histogram smaller relative to 2 scatter rows
 }
 
 
-# ── Build 4 plots ─────────────────────────────────────────────────────────────
+# ── Build 4 plots (unchanged calls) ──────────────────────────────────────────
 prop_aeg_prev <- make_plot_multi_virus(
   df_aeg_chik_multisero$obs, df_aeg_onnv_multisero$obs,
   meta_data_with_labels$aeg_pw_district,
-  xlab = "Proportion \nAedes aegypti"
+  xlab = "Proportion\nAedes aegypti"
 )
 
 prop_alb_prev <- make_plot_multi_virus(
   df_alb_chik_multisero$obs, df_alb_onnv_multisero$obs,
   meta_data_with_labels$alb_pw_district,
-  xlab = "Proportion \nAedes albopictus"
+  xlab = "Proportion\nAedes albopictus"
 )
 
 prop_fun_prev <- make_plot_multi_virus(
   df_fun_chik_multisero$obs, df_fun_onnv_multisero$obs,
   meta_data_with_labels$fun_pw_district,
-  xlab = "Proportion \nAnopheles funestus"
+  xlab = "Proportion\nAnopheles funestus"
 )
 
 prop_gam_prev <- make_plot_multi_virus(
   df_gam_chik_multisero$obs, df_gam_onnv_multisero$obs,
   meta_data_with_labels$gam_pw_district,
-  xlab = "Proportion \nAnopheles gambiae"
+  xlab = "Proportion\nAnopheles gambiae"
 )
 
 
-# ── Arrange 2×2 with shared legend ───────────────────────────────────────────
+# ── Arrange 2×2 with shared y-axis label ─────────────────────────────────────
 multisero_mosquito_pos_plots <- patchwork::wrap_plots(
   prop_aeg_prev, prop_alb_prev,
   prop_fun_prev, prop_gam_prev,
   ncol = 4
-) +
-  patchwork::plot_layout(guides = "collect") &
-  theme(legend.position = "bottom")
+) 
+
+print(multisero_mosquito_pos_plots)
+
+
 
 
 # save plots 
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/multisero_mosquito_pos_plots.png", 
        plot = multisero_mosquito_pos_plots,
-       width = 12, 
-       height = 5, 
+       width = 10.5, 
+       height = 6.5, 
        units = "in", 
        dpi = 300,
        bg = "white")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

@@ -357,6 +357,8 @@ acute_cases <- average_annual_infections * prob_disease
 acute_cases_ciL <- ciL_annual_infections * prob_disease 
 acute_cases_ciU <- ciU_annual_infections * prob_disease 
 
+acute_cases
+
 cat("Estimated number of acute cases per year:", acute_cases, "(", acute_cases_ciL, ",", acute_cases_ciU, ")\n")
 
 # chronic arthlgic cases
