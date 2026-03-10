@@ -457,8 +457,6 @@ plot_predicted_annual_infections <- function(foi_result, model, age_groups, age_
 }
 
 
-# --- Prevelance Patterns 
-
 # ---- Plot proportion positive by age 
 plot_age_seroprevalence <- function(data, chains_df, infM, pathogen_col, pathogen_name) {
   
@@ -553,6 +551,247 @@ plot_age_seroprevalence <- function(data, chains_df, infM, pathogen_col, pathoge
   
   print(p)
   return(list(plot = p, data = obs, draws = prevalence_draws))
+}
+
+# ---- Plot proportion positive by age stratified by gender
+plot_age_seroprevalence_by_year_gender_obs <- function(data_original, positive_col) {
+  
+  # Recreate the filtered dataset used in the model
+  data_plot <- data_original
+  data_plot$year_of_survey <- data_original$year_of_survey
+  
+  # Filter to only Sex = 1 (Male) or 2 (Female)
+  data_plot <- data_plot[data_plot$Sex %in% c(1, 2), ]
+  
+  # Create sex labels (assuming 1 = Male, 2 = Female)
+  data_plot$sex_label <- factor(data_plot$Sex, 
+                                levels = c(1, 2), 
+                                labels = c("Male", "Female"))
+  
+  # Age groups
+  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
+  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
+  data_plot$age_group <- cut(
+    data_plot$AgeInYears,
+    breaks = age_breaks,
+    labels = age_labels,
+    include.lowest = TRUE,
+    right = FALSE
+  )
+  
+  # Create formulas dynamically - now including sex_label
+  formula_mean <- as.formula(paste(positive_col, "~ year_of_survey + age_group + sex_label"))
+  formula_length <- as.formula(paste(positive_col, "~ year_of_survey + age_group + sex_label"))
+  
+  # Summaries by year, age group, and sex
+  obs <- aggregate(formula_mean, data_plot, mean, na.rm = TRUE)
+  n_by <- aggregate(formula_length, data_plot, length)
+  names(n_by)[4] <- "n"
+  names(obs)[4] <- "proportion_positive"
+  
+  obs <- merge(obs, n_by, by = c("year_of_survey", "age_group", "sex_label"))
+  obs$obs_lower <- pmax(0, obs$proportion_positive - 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
+  obs$obs_upper <- pmin(1, obs$proportion_positive + 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
+  
+  y_limits <- if (positive_col == "CHIK_pos") {
+    c(0, 0.08)
+  } else {
+    c(0, 0.8)
+  }
+  
+  # Plot with sex differentiation
+  p <- ggplot() +
+    geom_point(data = obs, aes(x = age_group, y = proportion_positive, color = sex_label), 
+               size = 2, position = position_dodge(width = 0.5)) +
+    geom_errorbar(data = obs, aes(x = age_group, ymin = obs_lower, ymax = obs_upper, color = sex_label), 
+                  width = 0.15, position = position_dodge(width = 0.5)) +
+    
+    facet_wrap(~ year_of_survey, ncol = 5) +
+    scale_y_continuous(limits = y_limits) +
+    scale_color_manual(values = c("Male" = "#0f4c5c", "Female" = "#90a955")) +
+    labs(
+      x = "Age group",
+      y = "Proportion seropositive",
+      title = paste("Observed seroprevalence by age group and sex -", positive_col),
+      color = "Sex"
+    ) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)
+  invisible(p)
+  
+  return(data_plot)
+}
+
+# --- Seroprevalence by age group by year - model fits ---
+plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_df, infM, pathogen_col) {
+  
+  # Recreate the filtered dataset used in the model
+  data_plot <- data
+
+# Only add derived variables (do NOT refilter rows)
+  data_plot$year_of_survey <- as.numeric(substr(data_plot$Sample, 1, 4))
+  data_plot$age_intro <- data_plot$year_of_survey - year_intro
+  data_plot$years_of_exposure <- pmin(data_plot$age_intro, data_plot$AgeInYears)
+
+  # Keep the id for proper alignment
+  kept_ids <- data_plot$id
+  
+  # Track original row numbers before any filtering
+  #data_plot$original_row <- as.numeric(rownames(data_plot))
+  
+  # Age groups
+  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
+  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30",
+                  "31-39", "40-49", "50+")
+  data_plot$age_group <- cut(
+    data_plot$AgeInYears,
+    breaks = age_breaks,
+    labels = age_labels,
+    include.lowest = TRUE,
+    right = FALSE
+  )
+  
+  # Attach fitted values from estimation stack (INLA predictions)
+  idx_est <- inla.stack.index(result$stk.full, tag = "est")$data
+  fit     <- result$output$summary.fitted.values[
+    idx_est, c("mean", "0.025quant", "0.975quant")
+  ]
+
+  head(stack_data$id[idx_est])
+  head(data_plot$id)
+  
+  
+  # Attach INLA predicted probabilities to each individual
+  data_plot <- data_plot %>%
+  dplyr::mutate(
+    predicted = fit$mean,
+    pred_lower = fit$`0.025quant`,
+    pred_upper = fit$`0.975quant`
+  )
+  # ---- Observed summaries using posterior probabilities from chains ----
+  # Find which components have pathogen_col = 1
+  nC <- nrow(infM)
+  positive_components <- which(infM[, pathogen_col] == 1)
+
+  # Find the columns in chains_df corresponding to the kept ids
+  prob_cols_list <- lapply(positive_components, function(comp) {
+    sprintf("post_prob[%d,%d]", match(kept_ids, meta_data_full_model$id), comp)
+  })
+
+  matched_idx <- match(kept_ids, meta_data_full_model$id)
+  cat("Any NA in posterior match:", any(is.na(matched_idx)), "\n")
+
+  print(head(data_plot$id))
+  print(head(meta_data_full_model$id[matched_idx]))
+  
+  # Get the indices we're keeping (after all filtering)
+  #kept_indices <- data_plot$original_row
+  #N_kept <- length(kept_indices)
+  
+  # Extract probabilities ONLY for individuals we're keeping
+  #prob_cols_list <- lapply(positive_components, function(comp) {
+  #  sprintf("post_prob[%d,%d]", kept_indices, comp)
+  #})
+  
+  # Sum probabilities across all positive components for each draw
+  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
+    as.matrix(chains_df[, cols])
+  }))
+  
+  n_draws <- nrow(probs_all_draws)
+  
+  # Calculate prevalence by year and age group for each draw
+  prevalence_draws <- purrr::map_dfr(1:n_draws, function(draw_num) {
+    probs_this_draw <- probs_all_draws[draw_num, ]
+    data_plot %>%
+      dplyr::mutate(prob_pos = probs_this_draw) %>%
+      group_by(year_of_survey, age_group) %>%
+      summarise(
+        prevalence = mean(prob_pos, na.rm = TRUE),
+        n = n(),
+        .groups = "drop"
+      ) %>%
+      dplyr::mutate(draw = draw_num)
+  })
+  
+  # Summarize observed data across draws
+  obs <- prevalence_draws %>%
+    group_by(year_of_survey, age_group) %>%
+    summarise(
+      obs_mean = median(prevalence),
+      obs_lower = quantile(prevalence, 0.025),
+      obs_upper = quantile(prevalence, 0.975),
+      n = first(n),
+      .groups = "drop"
+    )
+  
+  # ---- Predicted summaries (mean of INLA predicted probabilities) ----
+  pred <- aggregate(
+    cbind(predicted, pred_lower, pred_upper) ~ year_of_survey + age_group,
+    data_plot,
+    mean,
+    na.rm = TRUE
+  )
+ 
+  # ---- Plot ----
+  p <- ggplot() +
+    # observed (from posterior probabilities)
+    geom_point(
+      data = obs,
+      aes(x = age_group, y = obs_mean, color = "Observed"),
+      size = 5, 
+      position = position_nudge(x = -0.1)
+    ) +
+    geom_errorbar(
+      data = obs,
+      aes(x = age_group, ymin = obs_lower, ymax = obs_upper, color = "Observed"),
+      width = 0.15, 
+      position = position_nudge(x = -0.1)
+    ) +
+    # predicted (INLA model fits)
+    geom_point(
+      data = pred,
+      aes(x = age_group, y = predicted, color = "Estimated"),
+      size = 5,
+      position = position_nudge(x = 0.1)
+
+    ) +
+    geom_errorbar(
+      data = pred,
+      aes(x = age_group, ymin = pred_lower, ymax = pred_upper, color = "Estimated"),
+      width = 0.15,
+      position = position_nudge(x = 0.1)
+    ) +
+    scale_color_manual(
+        name = "",
+        values = c("Observed" = "#04989a", "Estimated" = "#c93a88")
+      ) +
+    facet_wrap(~ year_of_survey, ncol = 5) +
+    labs(
+      x = "Age group",
+      y = "Proportion seropositive") +
+    theme(
+      panel.grid = element_blank(),
+      panel.background = element_rect(fill = "white"),
+      axis.line = element_line(color = "black", linewidth = 0.7),
+      axis.ticks.x = element_line(color = "black", size = 0.5),
+      axis.ticks.y = element_line(color = "black", size = 0.5),
+      legend.position.inside = c(0.95, 0.5),
+      axis.text = element_text(size = 20),
+      axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
+      axis.title = element_text(size = 24),
+      aspect.ratio = 1.2,
+      legend.text = element_text(size = 24),
+      legend.title = element_text(size = 20),
+      strip.text = element_text(size = 20),
+      strip.background = element_rect(fill = "#ffffff"))
+
+
+
+  print(p)
+  invisible(list(plot = p, obs = obs, pred = pred, prevalence_draws = prevalence_draws))
 }
 
 # --- Seroprevalence by age group by year - model fits ---
@@ -935,64 +1174,3 @@ calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df,
   log_model = log_model))
 }
  
-
-
-
-district_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, infM, pathogen_col) {
-  
-  positive_components <- which(infM[, pathogen_col] == 1)
-  
-  data_plot <- data %>%
-    filter(!is.na(.data[[var_col]]), !is.na(stan_idx_full_model))
-  
-  kept_indices <- data_plot$stan_idx_full_model
-  
-  prob_cols_list <- lapply(positive_components, function(comp) {
-    cols <- sprintf("post_prob[%d,%d]", kept_indices, comp)
-    missing_cols <- setdiff(cols, colnames(chains_df))
-    if (length(missing_cols) > 0) {
-      stop("Missing posterior columns: ", paste(head(missing_cols), collapse = ", "))
-    }
-    cols
-  })
-  
-  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
-    as.matrix(chains_df[, cols])
-  }))
-  
-  n_draws <- nrow(probs_all_draws)
-  
-  # --- For each draw, aggregate to district level
-  prevalence_draws <- map_dfr(1:n_draws, function(draw_num) {
-    probs_this_draw <- probs_all_draws[draw_num, ]
-    
-    data_plot %>%
-      mutate(prob = probs_this_draw) %>%
-      group_by(district_lower) %>%
-      summarise(
-        var_mean     = mean(.data[[var_col]], na.rm = TRUE),
-        prevalence   = mean(prob, na.rm = TRUE),
-        n            = n(),
-        draw         = draw_num,
-        .groups      = "drop"
-      ) %>%
-      filter(n > 5)
-  })
-  
-  # --- Summarise across draws per district
-  obs <- prevalence_draws %>%
-    group_by(district_lower, var_mean, n) %>%
-    dplyr::summarise(
-      y    = median(prevalence),
-      ymin = quantile(prevalence, 0.025),
-      ymax = quantile(prevalence, 0.975),
-      .groups = "drop"
-    ) %>%
-    dplyr::select(district = district_lower, x = var_mean, y, ymin, ymax)
-  
-  # --- District-level Spearman correlation
-  print(cor(obs$x, obs$y, method = "spearman"))
-  
-  return(obs)
-}
-

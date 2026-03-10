@@ -21,20 +21,14 @@ library(here)
 library(cmdstanr)
 library(patchwork)
 library(mixR)
+library(forcats)
 
 source(here('R/MultiSeroFunctions.R'))
 source(here('R/Functions.R'))
 
-
-# Setup cmdstan
-check_cmdstan_toolchain()
-cmdstan_path <- "/Users/ap2488/.cmdstan/cmdstan-2.36.0"
-set_cmdstan_path(cmdstan_path)
-
-# Compile model
+# Recompile model
 model_path = here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/StanModel/Full_MultiSero_Model.stan')
-mod = cmdstan_model(model_path, pedantic=FALSE)
-
+mod = cmdstan_model(model_path, pedantic = FALSE, force_recompile = TRUE)
 
 # Import data file 
 meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv')
@@ -80,7 +74,8 @@ nrow(onnv_only_model_alpha)
 
 # pathogen names for the model 
 pathogens_full_model = c("ONNV_VLP_log","CHIKV_sE2_log","MAYV_E2_log")
-pathogens_onnv_only_model = c("ONNV_VLP_log","MAYV_E2_log")
+pathogens_chik_model = c("CHIKV_sE2_log","ONNV_VLP_log", "MAYV_E2_log")
+
 
 # run with all three 
 preprocessed_data_full_model <- prepare_multiplex_sero_data(
@@ -89,72 +84,83 @@ preprocessed_data_full_model <- prepare_multiplex_sero_data(
   present_pathogens = c("ONNV_VLP_log","CHIKV_sE2_log")
 )
 
-# run with all three 
-preprocessed_data_onnv_only_model <- prepare_multiplex_sero_data(
-  data = onnv_only_model_alpha,
-  pathogens = pathogens_onnv_only_model,
+preprocessed_data_chik_model <- prepare_multiplex_sero_data(
+  data = full_model_alpha,
+  pathogens = pathogens_chik_model,
+  present_pathogens = c("CHIKV_sE2_log")
+)
+
+
+preprocessed_data_onnv_model <- prepare_multiplex_sero_data(
+  data = full_model_alpha,
+  pathogens = pathogens_full_model,
   present_pathogens = c("ONNV_VLP_log")
 )
 
-saveRDS(preprocessed_data_full_model, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_full_model.rds')
-saveRDS(preprocessed_data_onnv_only_model, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_onnv_only_model.rds')
+saveRDS(preprocessed_data_full_model, here('Results/preprocessed_data_full_model.rds'))
+saveRDS(preprocessed_data_chik_model, here('Results/preprocessed_data_chik_model.rds'))
+saveRDS(preprocessed_data_onnv_model, here('Results/preprocessed_data_onnv_model.rds'))
 
-preprocessed_data_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_full_model.rds')
 
 #--- Fit full model 
-ini <- init(preprocessed_data_full_model$data, nChains = 3)
+ini_full <- init(preprocessed_data_full_model$data, nChains = 3)
+ini_chik <- init(preprocessed_data_chik_model$data, nChains = 3)
+ini_onnv <-  init(preprocessed_data_onnv_model$data, nChains = 3)
 
-
+ 
 fit_full_model <- mod$sample(
-data = preprocessed_data_full_model$data, 
-chains = 3, 
-iter_sampling = 3000, 
-refresh = 100, 
-iter_warmup = 1000, 
-parallel_chains = 3,
-init = ini,
-save_cmdstan_config=TRUE
+  data = preprocessed_data_full_model$data, 
+  chains = 3, 
+  iter_sampling = 3000, 
+  refresh = 100, 
+  iter_warmup = 1000, 
+  parallel_chains = 3,
+  init = ini_full,
+  save_cmdstan_config=TRUE
 )
 
 
-#--- Fit ONNV only model 
-ini <- init_diffSds(preprocessed_data_onnv_only_model$data, nChains = 3)
-fit_onnv_only_model <- mod$sample(
-data = preprocessed_data_onnv_only_model$data, 
-chains = 3, 
-iter_sampling = 3000, 
-refresh = 100, 
-iter_warmup = 1000, 
-parallel_chains = 3,
-init = ini,
-save_cmdstan_config=TRUE
+fit_chik_model <- mod_final$sample(
+  data = preprocessed_data_chik_model$data, 
+  chains = 3, 
+  iter_sampling = 3000, 
+  refresh = 100, 
+  iter_warmup = 1000, 
+  parallel_chains = 3,
+  init = ini_chik,
+  save_cmdstan_config=TRUE
 )
 
 
-#save fits
-fit_full_model$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/3rdMarch_full_model_fits.rds')
-fit_onnv_only_model$save_object('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/adapted_onnv_only_model_fits.rds')
+fit_onnv_model <- mod_final$sample(
+  data = preprocessed_data_onnv_model$data, 
+  chains = 3, 
+  iter_sampling = 3000, 
+  refresh = 100, 
+  iter_warmup = 1000, 
+  parallel_chains = 3,
+  init = ini_onnv,
+  save_cmdstan_config=TRUE
+)
 
 
-# Read fit RDS
-fit_full_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/3rdMarch_full_model_fits.rds')
-fit_onnv_only_model <-readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/adapted_onnv_only_model_fits.rds')
-fit_naive_model <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/naive_model_fits.rds')
 
+#saveRDS(fit, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/16thDEC_CHIK+ONNV_MultiSeroFit.rds')
+fit_full_model$save_object(here('Results/full_model_fits.rds'))
+fit_chik_model$save_object(here('Results/chik_model_fits.rds'))
+fit_onnv_model$save_object(here('Results/onnv_model_fits.rds'))
 
 
 # extract chains
-chains <- fit_full_model$draws(format='df')
-chains_df <- as.data.frame(chains)
+chains_full <- fit_full_model$draws(format='df')
+chains_df_full <- as.data.frame(chains)
+
+chains_chik <- fit_chik_model$draws(format='df')
+chains_df_chik <- as.data.frame(chains)
 
 
-# extract chains - onnv only model
-chain_onnv_only <- fit_onnv_only_model$draws(format='df')
-chains_df_onnv_only <- as.data.frame(chain_onnv_only)
-
-# extract chains - onnv only model
-chains_naive_model <- fit_naive_model$draws(format='df')
-chains_df_naive_model <- as.data.frame(chains_naive_model)
+chains_onnv <- fit_onnv_model$draws(format='df')
+chains_df_onnv <- as.data.frame(chains)
 
 
 # Plot trace plots with all chains clearly visible
@@ -167,23 +173,6 @@ quartz()
 print(p1 + p2 + p3 + p4)
 
 
-seq_along(preprocessed_data_full_model$pathogens)
-
-# Plot fits (neg component, neg-CR component, pos component)
-distfits <- plot_fits(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens, show_crossreactive_for = seq_along(preprocessed_data_full_model$pathogens))
-quartz()
-distfits$fitPN 
-
-
-ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/NEW_Fig2b.png',
-  plot = distfits$fitPN,
-  width = 10,
-  height = 8,
-  units = "in",
-  dpi = 300,
-  bg = "white"
-)
 
 # extract phi and mu1 posterior distributions
 phi <- extract_phi(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
@@ -195,38 +184,10 @@ print(sero)
 sds <- extract_sd(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
 print(sds)
 
-# MAYV homologous vs cross reactive increase 
-# --- Extract cross reactivity - MAYV vs ONNV and CHIK 
-CR_mayv <- titer_increases_comparison_mayv(phi$phi, mu$mus1)
-CR_mayv
 
-# plot titre increease due to infection / CR for each pathogen
+# cross reactive titre incease 
 p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
 print(p_CR)
-
-ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2c.png',
-  plot = p_CR$p,
-  width = 12,
-  height = 10,
-  units = "in",
-  dpi = 300
-)
-
-
-# plot proportion pos 
-p_sero <- plot_seroprevalence(chains_df)
-print(p_sero)
-
-
-ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2d.png',
-  plot = p_sero,
-  width = 12,
-  height = 10,
-  units = "in",
-  dpi = 300
-)
 
 
 # --- Cluster assignment based on max probability - For INLA analysis 
@@ -242,17 +203,8 @@ for (n in 1:N) {
 
 
 cluster_assignment <- apply(prob_matrix, 1, which.max)
-unique(cluster_assignment)
-table(cluster_assignment)
 cluster_assignment_with_uncertainty <- apply(prob_matrix, 1, max)
 
-
-# add labels back to meta data 
-nrow(prob_matrix)
-nrow(meta_data)
-nrow(meta_data_full_model)
-
-all(meta_data_full_model$id %in% meta_data$id)
 
 cluster_label <- max.col(prob_matrix, ties.method = "first") #returns leftmost if two cols have equal (and max) prob
 cluster_prob <- apply(prob_matrix, 1, max)
@@ -313,8 +265,7 @@ head(meta_data)
 write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv", row.names = FALSE)
 
 
-# --- Comparison to other model 
-
+# --- Comparison to other model
 
 # 1) compare estimtes of ONNV only model with full model 
 chains_onnv_only <- fit_onnv_only_model$draws(format='df')
@@ -539,13 +490,6 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/mosquito_pos_plot
 
 
 
-
-
-
-
-
-
-
 plot_vector_with_2d_model <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
 
   ylab <- paste0("Proportion ", gsub("_pos", "", pos_col), "positive")
@@ -615,13 +559,6 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/Fig1.png",
 
 
 
-
-
-
-
-
-
-
 # compare naive model fits to multisero model fits
 lli <- data.frame(model = c('Full Model', 'Naive Model'),
                   par = 'LogLik',
@@ -654,63 +591,78 @@ df_albopictus_chik_mixture_model <- calculate_prop_by_variable(
 
 
 
-p <- which(preprocessed_data_full_model$pathogens == "MAYV_E2_log")
-neg_idx <- which(preprocessed_data_full_model$data$infM[, p] == 0)
 
-cross_reactive_idx <- neg_idx[
-  rowSums(preprocessed_data_full_model$data$infM[neg_idx, , drop = FALSE]) > 0
-]
 
-true_neg_idx <- neg_idx[
-  rowSums(preprocessed_data_full_model$data$infM[neg_idx, , drop = FALSE]) == 0
-]
+# model comparison - ONNV only, CHIK only and ONNV + CHIK model 
 
-cat("Cross-reactive rows:\n")
-print(cross_reactive_idx)
+full_model <- readRDS(here('Results/full_model_fits.rds'))
+chik_model <- readRDS(here('Results/chik_model_fits.rds'))
+onnv_model <- readRDS(here('Results/onnv_model_fits.rds'))
 
-cat("Corresponding infM rows:\n")
-print(preprocessed_data_full_model$data$infM[cross_reactive_idx, , drop = FALSE])
 
-i <- 1  # pick any iteration
+# extract chains
+chains_full <- full_model$draws(format='df')
+chains_df_full <- as.data.frame(chains_full)
 
-# simulate components exactly like inside your function
-covM <- extract_covM(chains_df, preprocessed_data_full_model$data)
+chains_chik <- chik_model$draws(format='df')
+chains_df_chik <- as.data.frame(chains_chik)
 
-yy <- list()
-for (c in 1:preprocessed_data_full_model$data$nC) {
-  g <- paste('mu[', c, sep='')
-  muu <- sapply(1:preprocessed_data_full_model$data$nP, function(pp)
-    chains_df[i, paste0(g, ',', pp, ']')]
+
+chains_onnv <- onnv_model$draws(format='df')
+chains_df_onnv <- as.data.frame(chains_onnv)
+
+
+# compare naive model fits to multisero model fits
+lli <- data.frame(model = c('Full_Model', 'CHIK_only_model', 'ONNV_only_model'),
+                  par = 'LogLik',
+                  med = NA, ciL = NA, ciU = NA)
+
+lli[1, 3:5] <- quantile(chains_df_full$sumloglik,c(0.5, 0.025, 0.975))
+lli[2, 3:5] <- quantile(chains_df_chik$sumloglik, c(0.5, 0.025, 0.975))
+lli[3, 3:5] <- quantile(chains_df_onnv$sumloglik, c(0.5, 0.025, 0.975))
+
+unique(lli$model)
+
+
+lli <- lli |>
+  dplyr::mutate(model = fct_reorder(model, med))  # order by descending log-likelihood
+
+
+multisero_loglik_plot <- ggplot(lli, aes(x = model, y = med, group = 1)) +
+  geom_line(linetype = "dashed", linewidth = 0.8) +
+  geom_point(size = 3) +
+  scale_x_discrete(labels = c(
+  "CHIK_only_model" = "CHIK only model",
+  "ONNV_only_model" = "ONNV only model",
+  "Full_Model"      = "ONNV+CHIK model"
+  )) +
+  labs(
+    x = "Model",
+    y = "Log Likelihood"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    aspect.ratio = 0.75,
+    axis.line = element_line(color = "black", linewidth = 0.7),
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),
+    axis.text.x = element_text(size = 18),
+    axis.text.y = element_text(size = 18),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20),
+    axis.ticks.x = element_line(color = "black", size = 0.5),
+    axis.ticks.y = element_line(color = "black", size = 0.5),
+    axis.ticks.length = unit(0.2, "cm"),
+    plot.margin = margin(t = 10, r = 40, b = 10, l = 10, unit = "pt")
   )
 
-  yy[[c]] <- as.data.frame(
-    rmvnorm(500, mean = muu, sigma = covM[[i]][[c]])
-  )
-  yy[[c]]$C <- c
-}
+print(multisero_loglik_plot)
 
-yc <- do.call(rbind, yy)
-
-d_cr  <- density(yc[yc$C %in% cross_reactive_idx, p])
-d_tn  <- density(yc[yc$C %in% true_neg_idx, p])
-
-plot(d_tn, col="blue", main="MAYV component comparison")
-lines(d_cr, col="red")
-legend("topright", legend=c("True negative","Cross-reactive"),
-       col=c("blue","red"), lwd=2)
-
-
-infM <- preprocessed_data_full_model$data$infM
-colnames(infM) <- c("ONNV","CHIKV","MAYV")
-print(infM)
-
-p <- which(colnames(infM) == "MAYV")
-neg_idx <- which(infM[, p] == 0)
-cross_reactive_idx <- neg_idx[rowSums(infM[neg_idx, , drop = FALSE]) > 0]
-true_neg_idx <- neg_idx[rowSums(infM[neg_idx, , drop = FALSE]) == 0]
-
-cat("neg_idx:\n"); print(neg_idx)
-cat("cross_reactive_idx:\n"); print(cross_reactive_idx)
-cat("true_neg_idx:\n"); print(true_neg_idx)
-cat("cross-reactive infM rows:\n"); print(infM[cross_reactive_idx, , drop = FALSE])
-
+ggsave(here("Results/multisero_loglik_plot.png"), 
+       plot = multisero_loglik_plot,
+       width = 12, 
+       height = 6,
+       units = "in", 
+       dpi = 300,
+       bg = "white")

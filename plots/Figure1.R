@@ -5,8 +5,8 @@ sf_meta_data_with_coords_pw_filtered <- read.RDS(here('Results/sf_meta_data_with
 
 
 #demongraphy data 
-cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
-cam_pop_den <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_pd_2020_1km_UNadj.tif")
+cam_pop <- rast(here('Data/cmr_ppp_2020_UNadj.tif'))
+cam_pop_den <- rast(here('Data/cmr_pd_2020_1km_UNadj.tif'))
 
 # --- Figure 1 ----
 location_counts <- sf_meta_data_with_coords_pw_filtered %>%
@@ -82,8 +82,6 @@ fig1a_with_inset <- fig1a +
     inset_map, left = -1, bottom = 0.5, right = 1, top = 1, align_to = 'plot')
 
 print(fig1a_with_inset)
-
-
 
 # --- Save Figure 1a
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1a.png", 
@@ -261,12 +259,13 @@ fig1c <- ggplot(pyramid_data, aes(x = age_group, y = count, fill = Sex_label)) +
         legend.title = element_text(size = 20))
 print(fig1c)
 
+
+
+# Combined figure 
 fig1 <- (fig1a_with_inset | (fig1b / fig1c)) + plot_layout(widths = c(2, 1))
 
-
-
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1.png", 
-       plot = fig1,    # swap for your actual plot object name
+ggsave(15('fig1.png'), 
+       plot = fig1,    
        width = 19.5, 
        height = 12, 
        units = "in", 
