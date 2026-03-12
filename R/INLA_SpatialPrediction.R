@@ -29,7 +29,7 @@ library(colorspace)
 library(ggspatial)
 
 # --- Source functions
-source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
+source(here('R/Functions.R'))
 
 # Population and mosquito rasts
 anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_funestus_CMR.tiff')
@@ -61,12 +61,12 @@ if (grepl("\\+", age_groups$age_string[nrow(age_groups)])) {
 }
 
 # ----- Read preprocessed data with coords 
-meta_data_with_coords <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
+meta_data_with_coords <- readRDS(here('Results/meta_data_with_coords.rds'))
 colnames(meta_data_with_coords)
 nrow(meta_data_with_coords)
 
 # ----- Read labels data
-meta_data_with_labels <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv')
+meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
 colnames(meta_data_with_labels)
 nrow(meta_data_with_labels)
 
@@ -101,80 +101,21 @@ sum(is.na(model_data$Easting) & !is.na(model_data$Northing))
 sum(is.na(model_data$ONNV_pos))
 
 # --- Run INLA model for ONNV (with historic year of intro 1900)
-# --- Use population raster for prediction grid
 onnv_results_pop_grid <- run_inla(
   year_intro = 1900,
   data = model_data,
   cam_pop = cam_pop,
   positive_col = "ONNV_pos")
 
-# --- Save best model results 
-saveRDS(onnv_results_pop_grid, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/ONNV_INLAResults.rds')
-
-onnv_results_pop_grid <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/ONNV_INLAResults.rds')
-
-# --- ESTIMATED LOCATION CALCULATIONS BY REGION ----
-index_est <- inla.stack.index(onnv_results_pop_grid$stk.full, tag = "est")$data
-index_pred <- inla.stack.index(onnv_results_pop_grid$stk.full, tag = "pred")$data
-length(index_est)
-
-# Extract the intercept
-eta_est <- onnv_results_pop_grid$output$summary.linear.predictor[index_est, "mean"]
-eta_pred <- onnv_results_pop_grid$output$summary.linear.predictor[index_pred, "mean"]
-
-# account for age structure of data
-age_est <- onnv_results_pop_grid$data_filtered$years_of_exposure[index_est]
-log_lambda_est <- eta_est - log(age_est)
-lambda_est <- exp(log_lambda_est)
-
-# dont need to take into account age  
-lambda_pred <- exp(eta_pred)
-
-range(lambda_est)
-range(lambda_pred)
-
-
-# Add lamba est to data (to then group by region)
-est_data <- onnv_results_pop_grid$data_filtered
-
-# add region
-est_data$region <- sapply(strsplit(est_data$IdNumber, "-"), `[`, 2)
-# assuming ZST is mis-spelled and is EST
-est_data <- est_data %>%
-  mutate(region = recode(region, "ZST" = "EST"))
-unique(est_data$region)
-
-# add lambda at estimated locations
-est_data$lambda_est <- lambda_est
-
-
-pop_region <- est_data %>%
-  distinct(region, district_lower, Total_Population) %>%
-  group_by(region) %>%
-  summarise(
-    total_population = sum(Total_Population),
-    .groups = "drop"
-  )
-
-sum(pop_region$total_population)
-
-lambda_region <- est_data %>%
-  group_by(region) %>%
-  summarise(
-    lambda_weighted = weighted.mean(lambda_est, Total_Population),
-    lambda_unweighted = mean(lambda_est),
-    .groups = "drop"
-  )
-
-region_lambda <- left_join(pop_region, lambda_region, by = "region")
-print(region_lambda)
-sum(region_lambda$total_population)
-max(region_lambda$lambda_weighted)
-min(region_lambda$lambda_weighted)
+# --- Save prediction results 
+saveRDS(onnv_results_pop_grid, here('Results/ONNV_INLAResults.rds'))
+# Read saved results
+onnv_results_pop_grid <- readRDS(here('Results/ONNV_INLAResults.rds'))
 
 
 
 # --- SPATIAL PREDICTIONS: # Overall cameroon estimates ---- 
+
 # overall FOI
 foi_summary <- onnv_results_pop_grid$output$summary.fixed
 est_cameroonwide_foi <- list(
@@ -215,7 +156,6 @@ compute_foi_metrics <- function(foi_val, age_groups, w_age, cam_pop, total_camer
 }
 
 # --- Run for mean, ciL, ciU
-
 total_cameroon_pop <- sum(values(cam_pop), na.rm = TRUE)
 
 metrics_mean <- compute_foi_metrics(est_cameroonwide_foi$mean, age_groups, w_age, cam_pop, total_cameroon_pop)
@@ -223,7 +163,6 @@ metrics_ciL  <- compute_foi_metrics(est_cameroonwide_foi$ciL,  age_groups, w_age
 metrics_ciU  <- compute_foi_metrics(est_cameroonwide_foi$ciU,  age_groups, w_age, cam_pop, total_cameroon_pop)
 
 # ---summary 
-
 cameroon_summary <- data.frame(
   metric    = c("FOI", "Avg susceptible", "Avg seroprev", "Expected infections"),
   mean      = c(est_cameroonwide_foi$mean,  metrics_mean$avg_susceptible, metrics_mean$avg_seroprev, metrics_mean$infections),
@@ -246,7 +185,8 @@ seropos_ciU  <- total_cameroon_pop * metrics_ciU$avg_seroprev
 
 cat(sprintf(
   "We estimated that an average of %s (95%% CI: %s-%s) 
-  individuals get infected each year and that in 2020, %s (95%% CI: %s-%s) individuals had a history of ONNV infection, 
+  individuals get infected each year and that in 2020, 
+  %s (95%% CI: %s-%s) individuals had a history of ONNV infection, 
   representing %.1f%% (95%% CI: %.1f%%-%.1f%%) of the population.",
   formatC(metrics_mean$infections, format = "f", digits = 0),
   formatC(metrics_ciL$infections,  format = "f", digits = 0),
@@ -260,49 +200,26 @@ cat(sprintf(
 ))
 
 
-# --- Cameroon wide maps 
-foi_onnv <- plot_predicted_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
-range(foi_onnv$foi_df$foi)
 
-# --- Prob of seropositive proportion 
-sero_onnv <- plot_predicted_seroprevalence(
-  foi_result = foi_onnv,
-  model = onnv_results_pop_grid,
+# --- Cameroon Wide prediction, aggregated by region 
+foi_onnv <- predicted_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
+sero_onnv <- predicted_seroprevalence( foi_result = foi_onnv, model = onnv_results_pop_grid,
   age_groups = age_groups,
   age_weights = w_age,
   crs = 32633,
   pathogen_name = "ONNV"
 )
-
-
-# --- Annual Infections 
-infections_onnv <- plot_predicted_annual_infections(
+infections_onnv <- predicted_annual_infections(
   foi_result = foi_onnv,
   model = onnv_results_pop_grid,
   age_groups = age_groups,
+  age_weights = w_age,
   cam_pop = cam_pop,  
-  age_weights = w_age, 
   crs = 32633,
   pathogen_name = "ONNV"
 )
 
 
-# combined plots 
-maps <- foi_onnv$plot + sero_onnv$plot + infections_onnv$plot 
-
-
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4b.png", 
-       plot = maps,
-       width = 10, 
-       height = 7, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
-
-
-
-
-# --- Cameroon Wide prediction, aggregated by region 
 
 cameroon_regions <- ne_states(country = "Cameroon", returnclass = "sf")
 # rename 'name' to region
@@ -310,6 +227,7 @@ regions_sf <- cameroon_regions %>%
   dplyr::select(region = name) %>%   # standardise column name
   st_make_valid()
 
+# same aggregation as used for model fitting (10x10 km)
 cam_pop_agg <- terra::aggregate(cam_pop, fact = 10, fun = sum, na.rm = TRUE)
 
 foi_region <- aggregate_predictions_by_region(
@@ -320,6 +238,7 @@ foi_region <- aggregate_predictions_by_region(
   agg_type  = "weighted_mean"
 )
 print(foi_region)
+
 
 prev_region <- aggregate_predictions_by_region(
   pred_sf    = sero_onnv$prev_sf,
@@ -338,11 +257,16 @@ infection_region <- aggregate_predictions_by_region(
 )
 print(infection_region)
 
-
+# save region level predictions
+region_level_predictions <- list(
+  foi = foi_region,
+  prev = prev_region,
+  infections = infection_region
+)
+saveRDS(region_level_predictions, here('Results/region_level_predictions.rds'))
 
 
 # Discussion - prob of disease,  acute cases, arthralgic cases and  deaths per year occur in Cameroon each year
-
 average_annual_infections <- metrics_mean$infections
 ciL_annual_infections <- metrics_ciL$infections
 ciU_annual_infections <- metrics_ciU$infections
@@ -357,7 +281,7 @@ acute_cases <- average_annual_infections * prob_disease
 acute_cases_ciL <- ciL_annual_infections * prob_disease 
 acute_cases_ciU <- ciU_annual_infections * prob_disease 
 
-acute_cases
+
 
 cat("Estimated number of acute cases per year:", acute_cases, "(", acute_cases_ciL, ",", acute_cases_ciU, ")\n")
 
@@ -378,3 +302,7 @@ death_ciL <- ciL_annual_infections * prob_disease * prob_ifr
 death_ciU <- ciU_annual_infections * prob_disease * prob_ifr
 
 cat("Estimated number of deaths per year:", death, "(", death_ciL, ",", death_ciU, ")\n")
+
+
+
+

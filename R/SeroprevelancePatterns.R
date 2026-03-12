@@ -56,12 +56,6 @@ age_prev_model_fits <- plot_age_seroprevalence_model_fits(
 )
 print(age_prev_model_fits)
 
-stack_data <- inla.stack.data(onnv_results_pop_grid$stk.full)
-idx_est <- inla.stack.index(onnv_results_pop_grid$stk.full, tag = "est")$data
-
-head(stack_data$id[idx_est])
-head(data_plot$id)
-
 
 ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig3.png", 
        plot = age_prev_model_fits[[1]],    # swap for your actual plot object name
@@ -74,90 +68,6 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig3.png",
 
 
 
-chik_pos <- onnv_results_pop_grid$data_filtered |>
-  dplyr::filter(CHIK_pos == 1)
-chik_counts <- chik_pos |>
-  count(district_lower, name = "n")
-sum(chik_counts$n)
-
-
-chik_districts_sf <- cam_shapefile_districts_merged |>
-  dplyr::left_join(chik_counts,
-                   by = c("shapefile_district_lower" = "district_lower"))
-chik_districts_sf$n[(chik_districts_sf$n)] <- 0
-nrow(chik_districts_sf)
-
-chik_centroids <- chik_districts_sf |>
-  st_centroid()
-
-chik_centroids_jittered <- chik_centroids |>
-  dplyr::filter(n > 0) |>
-  dplyr::mutate(geometry = geometry + sf::st_sfc(lapply(seq_len(dplyr::n()), function(i) {
-    sf::st_point(c(runif(1, -0.05, 0.05), runif(1, -0.05, 0.05)))
-  })))
-sf::st_crs(chik_centroids_jittered) <- sf::st_crs(chik_centroids)
-
-# Highlight two biggest cities in Cameroon 
-cities <- data.frame(
-  city = c("Yaoundé", "Douala"),
-  Latitude  = c(3.8617, 4.0511),
-  Longitude  = c(11.5202, 9.7679)
-)
-cities_sf <- st_as_sf(
-  cities,
-  coords = c("Longitude", "Latitude"),
-  crs = 4326
-)
-
-
-chik_infections <-ggplot()  +
-  geom_sf(
-    data = cameroon,
-    fill = "white",
-    colour = "#252525",
-    linewidth = 0.3
-  ) +
-  geom_sf(
-    data = chik_centroids_jittered,
-    colour = '#065a82', 
-    size = 8,
-    alpha = 0.85)  + 
-  scale_size(
-  range = c(4, 11),
-  breaks = c(1, 2, 3, 4),
-  name = "CHIK+ve samples"
-) +
-  geom_sf(
-    data = cities_sf,
-    aes(fill = city),
-    shape = 24,
-    colour = "#1b3b6f",
-    size = 10,
-    stroke = 0.6
-  ) +
-  scale_fill_manual(
-    values = c("Yaoundé" = "#db2e6e", "Douala" = "#6a4c93"),
-    name = ""
-  ) +
-  annotation_scale(
-    bar_cols = c("black", "white"),  # alternating black/white like the reference
-    height = unit(0.2, "cm"),
-    text_family = "sans", 
-    text_cex = 1.5
-  ) +
-  theme(
-    legend.position = c(0.37, 0.66), 
-    panel.grid = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    legend.text = element_text(size = 20),        
-    legend.title = element_text(size = 20),   
-    panel.background = element_rect(fill = "white"),
-    plot.background = element_rect(fill = "white"),
-  )
-quartz()
-print(chik_infections)
-
 # proportion of chik by region 
 chik_pos_by_district <- onnv_results_pop_grid$data_filtered |>
   dplyr::group_by(district_lower) |>  # replace 'district' with your actual district column name
@@ -168,14 +78,6 @@ chik_pos_by_district <- onnv_results_pop_grid$data_filtered |>
   ) |>
   dplyr::arrange(dplyr::desc(proportion))
 
-
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4a.png", 
-       plot = chik_infections,    # swap for your actual plot object name
-       width = 10, 
-       height = 10, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
 
 
 
