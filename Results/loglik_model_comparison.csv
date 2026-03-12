@@ -1,0 +1,4 @@
+"model","par","med","ciL","ciU"
+"Full_Model","LogLik",-20842.6,-20851.9,-20835.6
+"CHIK_only_model","LogLik",-21108.3,-21129.8,-21091.8
+"ONNV_only_model","LogLik",-20899,-20905.4,-20895.2

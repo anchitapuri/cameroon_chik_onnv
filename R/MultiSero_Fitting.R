@@ -22,6 +22,7 @@ library(cmdstanr)
 library(patchwork)
 library(mixR)
 library(forcats)
+library(writexl)
 
 source(here('R/MultiSeroFunctions.R'))
 source(here('R/Functions.R'))
@@ -36,22 +37,23 @@ nrow(meta_data)
 unique(meta_data$year_of_survey)
 
 # Remove NAs
-meta_data_full_model <- meta_data %>%
+meta_data_chik_onnv_model <- meta_data %>%
   drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP) %>%
   mutate(stan_idx_full_model = row_number()) 
-nrow(meta_data_full_model)
-colnames(meta_data_full_model)
+nrow(meta_data_chik_onnv_model)
+colnames(meta_data_chik_onnv_model)
 
 # Number of samples per year (that the model was run on)
-meta_data_full_model %>%
+meta_data_chik_onnv_model %>%
   group_by(year_of_survey) %>%
   summarise(n_samples = n()) 
-unique(meta_data_full_model$year_of_survey)
+unique(meta_data_chik_onnv_model$year_of_survey)
 
-meta_data_onnv_only_model <- meta_data %>%
-  drop_na(MAYV_E2, ONNV_VLP) %>%
+# onnv samples == including 920 samples that were NA for CHIK and thus removed in the full model
+meta_data_onnv_samples_model <- meta_data %>%
+  drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP) %>%
   mutate(stan_idx_full_model = row_number()) 
-nrow(meta_data_onnv_only_model)
+nrow(meta_data_onnv_samples_model)
 
 
 # Log CHIK, ONNV and MAY
@@ -59,17 +61,17 @@ cols_to_log <- c("CHIKV_sE2", "MAYV_E2", "ONNV_VLP")
 new_cols_names <- paste0(cols_to_log, "_log")
 
 
-meta_data_full_model[new_cols_names] <- lapply(meta_data_full_model[cols_to_log], log)
-meta_data_onnv_only_model[new_cols_names] <- lapply(meta_data_onnv_only_model[cols_to_log], log)
+meta_data_chik_onnv_model[new_cols_names] <- lapply(meta_data_chik_onnv_model[cols_to_log], log)
+meta_data_onnv_samples_model[new_cols_names] <- lapply(meta_data_onnv_samples_model[cols_to_log], log)
 
 # Extract only pathogen cols
-full_model_alpha <- meta_data_full_model %>%
+full_model_alpha <- meta_data_chik_onnv_model %>%
   dplyr::select(CHIKV_sE2_log, MAYV_E2_log, ONNV_VLP_log)
 nrow(full_model_alpha)
 
-onnv_only_model_alpha <- meta_data_onnv_only_model %>%
+onnv_samples_model_alpha <- meta_data_onnv_samples_model %>%
   dplyr::select(CHIKV_sE2_log, MAYV_E2_log, ONNV_VLP_log)
-nrow(onnv_only_model_alpha)
+nrow(onnv_samples_model_alpha)
 
 
 # pathogen names for the model 
@@ -97,10 +99,16 @@ preprocessed_data_onnv_model <- prepare_multiplex_sero_data(
   present_pathogens = c("ONNV_VLP_log")
 )
 
+preprocessed_data_onnv_samples_model <- prepare_multiplex_sero_data(
+  data = onnv_samples_model_alpha,
+  pathogens = pathogens_full_model,
+  present_pathogens = c("ONNV_VLP_log")
+)
+
 saveRDS(preprocessed_data_full_model, here('Results/preprocessed_data_full_model.rds'))
 saveRDS(preprocessed_data_chik_model, here('Results/preprocessed_data_chik_model.rds'))
 saveRDS(preprocessed_data_onnv_model, here('Results/preprocessed_data_onnv_model.rds'))
-
+saveRDS(preprocessed_data_onnv_samples_model, here('Results/preprocessed_data_onnv_samples_model.rds'))
 
 #--- Fit full model 
 ini_full <- init(preprocessed_data_full_model$data, nChains = 3)
@@ -144,23 +152,40 @@ fit_onnv_model <- mod_final$sample(
 )
 
 
+fit_onnv_samples_model <- mod_final$sample(
+  data = preprocessed_data_onnv_samples_model$data, 
+  chains = 3, 
+  iter_sampling = 3000, 
+  refresh = 100, 
+  iter_warmup = 1000, 
+  parallel_chains = 3,
+  init = ini_onnv,
+  save_cmdstan_config=TRUE
+)
+
+
 
 #saveRDS(fit, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/16thDEC_CHIK+ONNV_MultiSeroFit.rds')
 fit_full_model$save_object(here('Results/full_model_fits.rds'))
 fit_chik_model$save_object(here('Results/chik_model_fits.rds'))
 fit_onnv_model$save_object(here('Results/onnv_model_fits.rds'))
 
+# Read RDS files
+fit_full_model <- readRDS(here('Results/full_model_fits.rds'))
+fit_chik_model <- readRDS(here('Results/chik_model_fits.rds'))
+fit_onnv_model <- readRDS(here('Results/onnv_model_fits.rds'))
+
 
 # extract chains
 chains_full <- fit_full_model$draws(format='df')
-chains_df_full <- as.data.frame(chains)
+chains_df_full <- as.data.frame(chains_full)
 
 chains_chik <- fit_chik_model$draws(format='df')
-chains_df_chik <- as.data.frame(chains)
+chains_df_chik <- as.data.frame(chains_chik)
 
 
 chains_onnv <- fit_onnv_model$draws(format='df')
-chains_df_onnv <- as.data.frame(chains)
+chains_df_onnv <- as.data.frame(chains_onnv)
 
 
 # Plot trace plots with all chains clearly visible
@@ -173,20 +198,16 @@ quartz()
 print(p1 + p2 + p3 + p4)
 
 
-
-# extract phi and mu1 posterior distributions
-phi <- extract_phi(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
-print(phi)
-mu <- extract_mu(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
-print(mu)
-sero <- extract_sero(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
-print(sero)
-sds <- extract_sd(chains_df, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
-print(sds)
-
+# Save posterior estimates from full model
+# extract posterior estimates
+phi <- extract_phi(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
+mu <- extract_mu(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
+sero <- extract_sero(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
+sds <- extract_sd(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
 
 # cross reactive titre incease 
 p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
+p_CR$plot_data
 print(p_CR)
 
 
@@ -200,11 +221,6 @@ for (n in 1:N) {
     prob_matrix[n, c] <- mean(draws_post[[sprintf("post_prob[%d,%d]", n, c)]])
   }
 }
-
-
-cluster_assignment <- apply(prob_matrix, 1, which.max)
-cluster_assignment_with_uncertainty <- apply(prob_matrix, 1, max)
-
 
 cluster_label <- max.col(prob_matrix, ties.method = "first") #returns leftmost if two cols have equal (and max) prob
 cluster_prob <- apply(prob_matrix, 1, max)
@@ -220,94 +236,83 @@ meta_data <- meta_data |>
   dplyr::left_join(cluster_df, by = "id")
 
 
-# label 2 == ONNV pos 
-# label 3 == CHIK pos 
-# else 0 (Neg for both)
+# label 2 == ONNV pos, label 3 == CHIK pos  else 0 (Neg for both)
 meta_data$ONNV_pos <- as.integer(meta_data$cluster == 2)
 meta_data$CHIK_pos <- as.integer(meta_data$cluster == 3)
 
 
-# plot to visualise distribution, coloured by label
-titres_plot <- plot_titres_coloured_by_clusters(meta_data)
-print(titres_plot)
-
-# After the plot_titres_coloured_by_clusters call, add this to identify and print probs for top 3 high CHIK points
-high_chik_indices <- order(meta_data$CHIKV_sE2, decreasing = TRUE)[1:3]
-high_chik_data <- meta_data[high_chik_indices, c("id", "CHIKV_sE2", "cluster", "cluster_prob")]
-print(high_chik_data)
-
-# To print the full probability vectors for these points
-for (i in high_chik_indices) {
-  cat("Sample ID:", meta_data$id[i], "\n")
-  print(prob_matrix[i, ])
-  cat("\n")
-}
-
-
-# -- Save figures and data with labels
-# Figures combined 
-fig2 <- distfits$fitPN / (titres_plot | p_CR$p | p_sero)  +
-  plot_layout(
-    widths = c(1, 1),
-    heights = c(1, 1)
-  )
-print(fig2)
-ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2.png',
-  plot = fig2,
-  width = 20,
-  height = 12,
-  units = "in",
-  dpi = 300
+# --- save outputs
+#save estimates
+write_xlsx(
+  list(
+    phi  = phi$phi,
+    cross_reactive_titre_increase = p_CR$plot_data,
+    mu_neg   = mu$mus0,
+    mu_pos = mu$mus1,
+    sero = sero,
+    sds  = sds
+  ),
+  path = here("Results/onnv_chik_model_posterior_estimates.xlsx")
 )
-head(meta_data)
-# save file with labels 
-write.csv(meta_data, "/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv", row.names = FALSE)
+
+# save meta data with cluster labels and probabilities
+write.csv(meta_data, here("Results/meta_data_with_labels.csv"), row.names = FALSE)
 
 
-# --- Comparison to other model
 
-# 1) compare estimtes of ONNV only model with full model 
-chains_onnv_only <- fit_onnv_only_model$draws(format='df')
-chains_df_onnv_only <- as.data.frame(chains_onnv_only)
+# --- Comparison to other models
+
+
+# --- 1) Compare estimtes of Full ONNV only model (with all samples) with ONNV+CHIK model (with 920 samples removed that were NA for CHIK)
+chains_onnv_samples <- fit_onnv_samples_model$draws(format='df')
+chains_df_onnv_samples <- as.data.frame(chains_onnv_samples)
 
 # Model 2 
-sero_onnv_only <- extract_sero(chains_df_onnv_only, preprocessed_data_onnv_only_model$data, 
-pathogens=preprocessed_data_onnv_only_model$pathogens)
-print(sero_onnv_only)
+sero_onnv_samples <- extract_sero(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, 
+pathogens=preprocessed_data_onnv_samples_model$pathogens)
+mu_onnv_samples <- extract_mu(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, pathogens=preprocessed_data_onnv_samples_model$pathogens)
+phi_onnv_samples <- extract_phi(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, pathogens=preprocessed_data_onnv_samples_model$pathogens)
+sds_onnv_samples <- extract_sd(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, pathogens=preprocessed_data_onnv_samples_model$pathogens)
 
-mu_onnv_only <- extract_mu(chains_df_onnv_only, preprocessed_data_onnv_only_model$data, pathogens=preprocessed_data_onnv_only_model$pathogens)
-print(mu_onnv_only)
-
-phi_onnv_only <- extract_phi(chains_df_onnv_only, preprocessed_data_onnv_only_model$data, pathogens=preprocessed_data_onnv_only_model$pathogens)
-print(phi_onnv_only)
-
-# Model 1 
-print(sero)
-print(mu)
-print(phi)
-
-
-
-
-
-# CHIK vs ONNV correlation plot 
-quartz()
-plot(full_model_alpha$ONNV_VLP_log, full_model_alpha$CHIKV_sE2_log,col = "#003c8b", pch = 16, xlab = "Log (ONNV VLP MFI)", ylab = "Log (CHIK sE2 MFI)")
+# save estimates
+write_xlsx(
+  list(
+    phi  = phi_onnv_samples,
+    mu   = mu_onnv_samples,
+    sero = sero_onnv_samples,
+    sds  = sds_onnv_samples
+  ),
+  path = here("Results/onnv_samples_model_posterior_estimates.xlsx")
+)
 
 
-# 2) Compare multisero model estimates to 2D Mixture model fits 
+# --- 2) Compare ONNV+CHIK, ONNV only and CHIK only models
+lli <- data.frame(model = c('Full_Model', 'CHIK_only_model', 'ONNV_only_model'),
+                  par = 'LogLik',
+                  med = NA, ciL = NA, ciU = NA)
+
+lli[1, 3:5] <- quantile(chains_df_full$sumloglik,c(0.5, 0.025, 0.975))
+lli[2, 3:5] <- quantile(chains_df_chik$sumloglik, c(0.5, 0.025, 0.975))
+lli[3, 3:5] <- quantile(chains_df_onnv$sumloglik, c(0.5, 0.025, 0.975))
+
+lli <- lli |>
+  dplyr::mutate(model = fct_reorder(model, med))  # order by descending log-likelihood
+
+# save log-likelihood summary
+write.csv(lli, here("Results/loglik_model_comparison.csv"), row.names = FALSE)
+
+
+
+#--- 3)Compare multisero model estimates to 2D Mixture model fits 
 # ---- Fit CHIK  - using 50% for comp2
 fmm_normal_chik <- mixfit(full_model_alpha$CHIKV_sE2_log, ncomp = 2, family="normal")
-plot(fmm_normal_chik)
-pred.dat_normal_chik <-cbind(fmm_normal_chik$data, fmm_normal_chik$comp.prob)
+pred.dat_normal_chik <- cbind(fmm_normal_chik$data, fmm_normal_chik$comp.prob)
 chik_positive_normal <- ifelse(pred.dat_normal_chik[, 3] > 0.5, "1", "0")
 table(chik_positive_normal)
 
 
 # ---- Fit ONNV  - using 50% for comp2
 fmm_normal_onnv <- mixfit(full_model_alpha$ONNV_VLP_log, ncomp = 2, family="normal")
-#define threshold to get onnv+ve and onnv-ve
 pred.dat_normal_onnv <- cbind(fmm_normal_onnv$data, fmm_normal_onnv$comp.prob)
 onnv_positive_normal <- ifelse(pred.dat_normal_onnv[, 3] > 0.5, "1", "0")
 table(onnv_positive_normal)
@@ -315,8 +320,6 @@ table(onnv_positive_normal)
 
 # ---- Fit MAYV  - using 50% for comp2
 fmm_normal_mayv <- mixfit(full_model_alpha$MAYV_E2_log, ncomp = 2, family="normal")
-plot(fmm_normal_mayv)
-#define threshold to get chik+ve and chik-ve
 pred.dat_normal_mayv<-cbind(fmm_normal_mayv$data, fmm_normal_mayv$comp.prob)
 mayv_positive_normal <- ifelse(pred.dat_normal_mayv[, 3] > 0.5, "1", "0")
 table(mayv_positive_normal)
@@ -342,15 +345,6 @@ mayv <- plot(fmm_normal_mayv) +  theme(axis.text.x = element_text(size = 14),
           axis.title.y = element_blank())
 
 mixture_models_fits <- chik + onnv + mayv 
-# save plots 
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/mixture_models_fits.png", 
-       plot = mixture_models_fits,
-       width = 15, 
-       height = 5, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
-
 
 
 
@@ -361,6 +355,8 @@ mixture_model_data$ONNV_pos_mixture_model <- as.numeric(ifelse(fmm_normal_onnv$c
 mixture_model_data$MAYV_pos_mixture_model <- as.numeric(ifelse(fmm_normal_mayv$comp.prob[, 2] > 0.5, "1", "0"))
 
 
+
+# Proportion mosquitoes with propotion positive for each virus based on 2D mixture model fits
 aegmax <- seq(0,1,0.1)
 aegmin <- aegmax - 0.5
 aegmin[which(aegmin<0)] <- 0
@@ -473,7 +469,6 @@ prop_gam_prev <- plot_vector_multi_virus(
 )
 
 
-
 mosquito_pos_plots <- (prop_aeg_prev | prop_alb_prev) / (prop_fun_prev | prop_gam_prev) +
   plot_layout(guides = "collect") &
   theme(legend.position = "bottom")
@@ -495,7 +490,6 @@ plot_vector_with_2d_model <- function(df_obs, raw_data, xlab, color, pos_col = "
   ylab <- paste0("Proportion ", gsub("_pos", "", pos_col), "positive")
 
   obs_clean <- df_obs[!is.nan(df_obs$x), ]
-
 
 
   x_scale <- scale_x_continuous(
@@ -559,16 +553,6 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/Fig1.png",
 
 
 
-# compare naive model fits to multisero model fits
-lli <- data.frame(model = c('Full Model', 'Naive Model'),
-                  par = 'LogLik',
-                  med = NA, ciL = NA, ciU = NA)
-
-lli[1, 3:5] <- quantile(chains_df$sumloglik,c(0.5, 0.025, 0.975))
-lli[2, 3:5] <- quantile(chains_df_naive_model$sumloglik, c(0.5, 0.025, 0.975))
-lli
-
-
 
 # Aegypti
 df_aegypti_chik_mixture_model <- calculate_prop_by_variable(
@@ -588,81 +572,3 @@ df_albopictus_chik_mixture_model <- calculate_prop_by_variable(
 
 
 
-
-
-
-
-
-# model comparison - ONNV only, CHIK only and ONNV + CHIK model 
-
-full_model <- readRDS(here('Results/full_model_fits.rds'))
-chik_model <- readRDS(here('Results/chik_model_fits.rds'))
-onnv_model <- readRDS(here('Results/onnv_model_fits.rds'))
-
-
-# extract chains
-chains_full <- full_model$draws(format='df')
-chains_df_full <- as.data.frame(chains_full)
-
-chains_chik <- chik_model$draws(format='df')
-chains_df_chik <- as.data.frame(chains_chik)
-
-
-chains_onnv <- onnv_model$draws(format='df')
-chains_df_onnv <- as.data.frame(chains_onnv)
-
-
-# compare naive model fits to multisero model fits
-lli <- data.frame(model = c('Full_Model', 'CHIK_only_model', 'ONNV_only_model'),
-                  par = 'LogLik',
-                  med = NA, ciL = NA, ciU = NA)
-
-lli[1, 3:5] <- quantile(chains_df_full$sumloglik,c(0.5, 0.025, 0.975))
-lli[2, 3:5] <- quantile(chains_df_chik$sumloglik, c(0.5, 0.025, 0.975))
-lli[3, 3:5] <- quantile(chains_df_onnv$sumloglik, c(0.5, 0.025, 0.975))
-
-unique(lli$model)
-
-
-lli <- lli |>
-  dplyr::mutate(model = fct_reorder(model, med))  # order by descending log-likelihood
-
-
-multisero_loglik_plot <- ggplot(lli, aes(x = model, y = med, group = 1)) +
-  geom_line(linetype = "dashed", linewidth = 0.8) +
-  geom_point(size = 3) +
-  scale_x_discrete(labels = c(
-  "CHIK_only_model" = "CHIK only model",
-  "ONNV_only_model" = "ONNV only model",
-  "Full_Model"      = "ONNV+CHIK model"
-  )) +
-  labs(
-    x = "Model",
-    y = "Log Likelihood"
-  ) +
-  theme_minimal() +
-  theme(
-    panel.grid = element_blank(),
-    aspect.ratio = 0.75,
-    axis.line = element_line(color = "black", linewidth = 0.7),
-    axis.title.x = element_text(size = 24),
-    axis.title.y = element_text(size = 24),
-    axis.text.x = element_text(size = 18),
-    axis.text.y = element_text(size = 18),
-    legend.title = element_text(size = 20),
-    legend.text = element_text(size = 20),
-    axis.ticks.x = element_line(color = "black", size = 0.5),
-    axis.ticks.y = element_line(color = "black", size = 0.5),
-    axis.ticks.length = unit(0.2, "cm"),
-    plot.margin = margin(t = 10, r = 40, b = 10, l = 10, unit = "pt")
-  )
-
-print(multisero_loglik_plot)
-
-ggsave(here("Results/multisero_loglik_plot.png"), 
-       plot = multisero_loglik_plot,
-       width = 12, 
-       height = 6,
-       units = "in", 
-       dpi = 300,
-       bg = "white")

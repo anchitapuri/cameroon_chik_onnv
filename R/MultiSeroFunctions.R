@@ -482,7 +482,7 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
   ) %>%
     mutate(
       response_type = factor(response_type, levels = c("Homologous", "Cross-reactive \n(φ × μ1)")),
-      antigen_label = ifelse(antigen == "ONNV_VLP_log", "ONNV", "CHIK")
+      antigen_label = ifelse(antigen == "ONNV_VLP_log", "ONNV Antigen", "CHIK Antigen")
     )
   
   p <- ggplot(plot_data, aes(x = response_type, y = increase, fill = infecting_virus)) +

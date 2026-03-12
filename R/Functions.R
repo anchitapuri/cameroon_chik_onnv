@@ -964,8 +964,6 @@ plot_age_seroprevalence_model_fits <- function(year_intro, result, data, chains_
   invisible(list(plot = p, obs = obs, pred = pred, prevalence_draws = prevalence_draws))
 }
 
-
-
 # prediction FOI, seroprevelance and infections by region 
 aggregate_predictions_by_region <- function(
   pred_sf,

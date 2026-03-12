@@ -27,7 +27,7 @@ source(here('R/Functions.R'))
 
 
 #read files 
-meta_data_with_labels <- read.csv(here('Results/final_meta_data_with_labels.csv'))
+meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
 preprocessed_data_full_model <- (here('Results/preprocessed_data_full_model.rds'))
 fit_full_model <- readRDS(here('Results/full_model_fits.rds'))
 
@@ -97,4 +97,5 @@ ggsave(
   units = "in",
   dpi = 300
 )
+
 

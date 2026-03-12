@@ -255,58 +255,6 @@ make_plot <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
 }
 
 
-make_plot_chik <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
-
-  ylab <- paste0("Proportion ", gsub("_pos", "", pos_col), "positive")
-
-  obs_clean <- df_obs[!is.nan(df_obs$x), ]
-
-  # truncate CIs to [0, 0.5]
-  obs_clean$ymin <- pmax(obs_clean$ymin, 0)
-  obs_clean$ymax <- pmin(obs_clean$ymax, 0.1)
-
-  hist_df <- data.frame(x = as.numeric(raw_data))
-  hist_df <- hist_df[!is.na(hist_df$x), , drop = FALSE]
-
-    x_scale <- scale_x_continuous(
-    limits = c(0, 1),
-    breaks = seq(0, 1, 0.25),
-    labels = c("0", "0.25", "0.5", "0.75", "1"),
-    expand = c(0, 0)
-  )
-
-  plot_hist <- ggplot(hist_df, aes(x = x)) +
-    geom_histogram(fill = color, alpha = 0.5, bins = 30, color = NA) +
-    x_scale +
-    labs(x = NULL, y = "Count") +
-    base_theme +
-    theme(
-      axis.text.x  = element_blank(),
-      axis.ticks.x = element_blank(),
-      plot.margin  = margin(t = 6, r = 14, b = 10, l = 14)
-    )
-
-  plot_scatter <- ggplot(obs_clean, aes(x = x, y = y)) +
-    geom_point(color = color, size = 4, alpha = 0.9) +
-    geom_errorbar(
-      aes(ymin = ymin, ymax = ymax),
-      width = 0, color = color, alpha = 0.6, linewidth = 0.6
-    ) +
-    x_scale +
-    coord_cartesian(ylim = c(0, 0.05), expand = FALSE) +
-    scale_y_continuous(breaks = seq(0, 0.05, 0.01)) +
-    labs(x = xlab, y = ylab) +
-    base_theme +
-    theme(
-      plot.margin = margin(t = 10, r = 14, b = 12, l = 14)
-    )
-
-  plot_hist / plot_scatter +
-    patchwork::plot_layout(heights = c(2, 4))
-  
-}
-
-
 
 df_fun_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,
@@ -477,87 +425,6 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/supplementary_Fig
 
 
 
-# ---  CHIK 
-df_fun_chik <- calculate_prop_by_variable(
-  data = meta_data_with_labels,
-  var_col = "fun_pw_district", 
-  positive_col = "CHIK_pos",
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
-
-
-# Gambiae
-df_gam_chik <- calculate_prop_by_variable(
-  data = meta_data_with_labels,
-  var_col = "gam_pw_district", 
-  positive_col = "CHIK_pos",
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
-
-
-
-# Aegypti
-df_aegypti_chik <- calculate_prop_by_variable(
-  data = meta_data_with_labels, 
-  var_col = "aeg_pw_district", 
-  positive_col = "CHIK_pos",
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
-
-  # Albopictus
-df_albopictus_chik <- calculate_prop_by_variable(
-  data = meta_data_with_labels, 
-  var_col = "alb_pw_district", 
-  positive_col = "CHIK_pos",
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
-
-
-# --- Plots
-prop_fun_prev_chik <- make_plot_chik(
-  df_fun_chik$obs,
-  meta_data_with_labels$fun_pw_district,
-  "Proportion Anopheles funestus",
-  color ="#023e8a", pos_col =  "CHIK_pos"
-)
-
-
-prop_gam_prev_chik <- make_plot_chik(
-  df_gam_chik$obs,
-  meta_data_with_labels$gam_pw_district,
-  "Proportion Anopheles gambiae",
-  color ="#165262", pos_col =  "CHIK_pos"
-)
-
-
-prop_aeg_prev_chik <- make_plot_chik(
-  df_aegypti_chik$obs,
-  meta_data_with_labels$aeg_pw_district,
-  "Proportion Aedes aegypti",
-  color ="#c1518b", pos_col =  "CHIK_pos"
-)
-
-prop_albo_prev_chik <- make_plot_chik(
-  df_albopictus_chik$obs,
-  meta_data_with_labels$alb_pw_district,
-  "Proportion Aedes albopictus",
-  color = "#430726", pos_col =  "CHIK_pos"
-)
-
-anopheles_and_aedes_chik <- 
-  patchwork::wrap_plots(
-    prop_fun_prev_chik, prop_gam_prev_chik, prop_aeg_prev_chik, prop_albo_prev_chik,
-    ncol = 2
-  ) +
-  patchwork::plot_layout(axes = "collect_x")
-
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/supplementary_Fig3.png", 
-       plot = anopheles_and_aedes_chik,
-       width = 12, 
-       height = 12, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
 
 
 # ---ONNV with population density 
@@ -733,7 +600,6 @@ multisero_mosquito_pos_plots <- patchwork::wrap_plots(
 ) 
 
 print(multisero_mosquito_pos_plots)
-
 
 
 
