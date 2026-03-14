@@ -12,72 +12,27 @@ library(cowplot)
 library(ggpubr)
 library(ggh4x)
 
-
-
 # --- Source functions
-source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/Spatial Analysis/Functions.R'))
-source(here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/MultiSeroModel/MultiSeroFunctions.R'))
+source(here('R/Functions.R'))
+source(here('R/MultiSeroFunctions.R'))
 
+# Import data 
 cameroon_districts <- ne_states(country = "Cameroon", returnclass = "sf")
 cameroon <- ne_countries(country = "Cameroon", returnclass = "sf")
-# Import multisero fits 
-fit <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/adapted_full_model_fits.rds')
+
+
 # Import INLA model fits 
 onnv_results_pop_grid <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/ONNV_INLAResults.rds')
-# Extract chains 
-chains <- fit$draws(format='df')
-chains_df <- as.data.frame(chains)
 
-meta_data_with_coords <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
+# Multiset model +  chains + model data 
+fit_full_model <- readRDS(here('Results/full_model_fits.rds'))
+chains_full <- fit_full_model$draws(format='df')
+chains_df_full <- as.data.frame(chains_full)
+preprocessed_data_full_model <- readRDS('/Results/preprocessed_data_full_model.rds')
 
-# Read preprocessed data
-preprocessed_data <- readRDS('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/preprocessed_data_full_model.rds')
-
-# shapefile with district geometries 
-cam_shapefile_districts_merged <- readRDS("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cam_shapefile_districts_merged.rds")
-
-
+# meta data with labels and coordinates
+meta_data_with_coords <- readRDS('/Results/meta_data_with_coords.rds')
 meta_data_with_labels <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/final_meta_data_with_labels.csv')
-nrow(meta_data_with_labels)
-
-
-nrow(meta_data_with_labels)
-nrow(onnv_results_pop_grid$data_filtered)
-
-# --- Plot age seroprevalence model fits
-# prepare data for stan
-age_prev_model_fits <- plot_age_seroprevalence_model_fits(
-  year_intro = onnv_results_pop_grid$year,
-  result = onnv_results_pop_grid, 
-  data = onnv_results_pop_grid$data_filtered,
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = "a" # a == ONNV 
-)
-print(age_prev_model_fits)
-
-
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig3.png", 
-       plot = age_prev_model_fits[[1]],    # swap for your actual plot object name
-       width = 18, 
-       height = 12, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
-
-
-
-
-# proportion of chik by region 
-chik_pos_by_district <- onnv_results_pop_grid$data_filtered |>
-  dplyr::group_by(district_lower) |>  # replace 'district' with your actual district column name
-  dplyr::summarise(
-    chik_pos = sum(CHIK_pos == 1, na.rm = TRUE),
-    total = n(),
-    proportion = chik_pos / total
-  ) |>
-  dplyr::arrange(dplyr::desc(proportion))
-
 
 
 
@@ -87,75 +42,9 @@ anoph_max <- seq(0, 1, 0.1)
 anoph_min <- anoph_max - 0.5
 anoph_min[which(anoph_min < 0)] <- 0
 
-
-
-# general plot format 
-base_theme <- theme_classic() +
-  theme(
-    panel.grid = element_blank(),
-    axis.line = element_line(color = "black", linewidth = 0.7),
-    axis.title.x = element_text(size = 24),
-    axis.title.y = element_text(size = 24),
-    axis.text.x = element_text(size = 20),
-    axis.text.y = element_text(size = 20),
-    legend.title = element_text(size = 20),
-    legend.text = element_text(size = 20),
-    axis.ticks.x = element_line(color = "black", size = 0.5),
-    axis.ticks.y = element_line(color = "black", size = 0.5),
-    axis.ticks.length = unit(0.2, "cm")
-  )
-
-make_plot <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
-
-  ylab <- paste0("Proportion ", gsub("_pos", "", pos_col), "positive")
-
-  obs_clean <- df_obs[!is.nan(df_obs$x), ]
-
-  # truncate CIs to [0, 0.5]
-  obs_clean$ymin <- pmax(obs_clean$ymin, 0)
-  obs_clean$ymax <- pmin(obs_clean$ymax, 0.5)
-
-  hist_df <- data.frame(x = as.numeric(raw_data))
-  hist_df <- hist_df[!is.na(hist_df$x), , drop = FALSE]
-
-    x_scale <- scale_x_continuous(
-    limits = c(0, 1),
-    breaks = seq(0, 1, 0.25),
-    labels = c("0", "0.25", "0.5", "0.75", "1"),
-    expand = c(0, 0)
-  )
-
-  plot_hist <- ggplot(hist_df, aes(x = x)) +
-    geom_histogram(fill = color, alpha = 0.5, bins = 30, color = NA) +
-    x_scale +
-    labs(x = NULL, y = "Count") +
-    base_theme +
-    theme(
-      axis.text.x  = element_blank(),
-      axis.ticks.x = element_blank(),
-      plot.margin  = margin(t = 6, r = 14, b = 10, l = 14)
-    )
-
-  plot_scatter <- ggplot(obs_clean, aes(x = x, y = y)) +
-    geom_point(color = color, size = 4, alpha = 0.9) +
-    geom_errorbar(
-      aes(ymin = ymin, ymax = ymax),
-      width = 0, color = color, alpha = 0.6, linewidth = 0.6
-    ) +
-    x_scale +
-    coord_cartesian(ylim = c(0, 0.4), expand = FALSE) +
-    scale_y_continuous(breaks = seq(0, 0.4, 0.1)) +
-    labs(x = xlab, y = ylab) +
-    base_theme +
-    theme(
-      plot.margin = margin(t = 10, r = 14, b = 12, l = 14)
-    )
-
-  plot_hist / plot_scatter +
-    patchwork::plot_layout(heights = c(2, 4))
-  
-}
-
+aegmax <- seq(0,1,0.1)
+aegmin <- aegmax - 0.5
+aegmin[which(aegmin<0)] <- 0
 
 
 df_fun_binary <- calculate_prop_by_variable (
@@ -173,12 +62,6 @@ df_gam_binary <- calculate_prop_by_variable (
   breaks_min = anoph_min)
 
 
-# ----onnv correlation with aedes 
-aegmax <- seq(0,1,0.1)
-aegmin <- aegmax - 0.5
-aegmin[which(aegmin<0)] <- 0
-
-
 df_aegypti_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,
   var_col = "aeg_pw_district", 
@@ -194,46 +77,6 @@ df_albopictus_binary <- calculate_prop_by_variable (
   breaks_min = aegmin)
 
 
-# --- Plots
-prop_fun_prev <- make_plot(
-  df_fun_binary$obs,
-  meta_data_with_labels$fun_pw_district,
-  "Proportion Anopheles funestus",
-  color ="#023e8a", pos_col =  "ONNV_pos"
-)
-
-prop_gam_prev <- make_plot(
-  df_gam_binary$obs,
-  meta_data_with_labels$gam_pw_district,
-  "Proportion Anopheles gambiae",
-  color ="#165262", pos_col =  "ONNV_pos"
-)
-
-prop_aeg_prev <- make_plot(
-  df_aegypti_binary$obs,
-  meta_data_with_labels$aeg_pw_district,
-  "Proportion Aedes aegypti",
-  color ="#c1518b", pos_col =  "ONNV_pos"
-)
-
-prop_albo_prev <- make_plot(
-  df_albopictus_binary$obs,
-  meta_data_with_labels$alb_pw_district,
-  "Proportion Aedes albopictus",
-  color = "#430726", pos_col =  "ONNV_pos"
-)
-
-anopheles_and_aedes_onnv <-
-  patchwork::wrap_plots(
-    prop_fun_prev, prop_gam_prev, prop_aeg_prev, prop_albo_prev,
-    ncol = 2
-  ) +
-  patchwork::plot_layout(axes = "collect_x")
-
-
-dfun <- function(model) {
-  summary(model)$dispersion
-}
 
 # compare models using AIC and log likelihood
 metrics_df <- data.frame(
@@ -257,77 +100,14 @@ metrics_df <- data.frame(
   )
 )
 
-metrics_df$delta_AIC <- metrics_df$AIC - min(metrics_df$AIC)
 metrics_df <- metrics_df[order(metrics_df$logLik), ]
 metrics_df$k <- 1:nrow(metrics_df)  
-
-loglik_plot <- ggplot(metrics_df,
-                      aes(x = k, y = logLik)) +
-  geom_line(linetype = "dashed", linewidth = 0.8) +
-  geom_point(size = 3) +
-  scale_x_continuous(breaks = metrics_df$k, labels = metrics_df$species) +
-  labs(
-    x = "Species",
-    y = "Log Likelihood"
-  ) +
-  theme_minimal()  +
-  theme(
-    panel.grid = element_blank(),
-    aspect.ratio = 0.75,
-    axis.line = element_line(color = "black", linewidth = 0.7),
-    axis.title.x = element_text(size = 24),
-    axis.title.y = element_text(size = 24),
-    axis.text.x = element_text(size = 18),
-    axis.text.y = element_text(size = 18),
-    legend.title = element_text(size = 20),
-    legend.text = element_text(size = 20),
-    axis.ticks.x = element_line(color = "black", size = 0.5),
-    axis.ticks.y = element_line(color = "black", size = 0.5),
-    axis.ticks.length = unit(0.2, "cm"),
-    plot.margin = margin(t = 10, r = 40, b = 10, l = 10, unit = "pt")
-  )
-
-  
-quartz()
-print(loglik_plot)
-
 
 # beta 
 print(summary(df_fun_binary$log_model))
 print(summary(df_gam_binary$log_model))
 print(summary(df_aegypti_binary$log_model))
 print(summary(df_albopictus_binary$log_model))
-
-# --- Save Figures
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig4c_new.png", 
-       plot = prop_gam_prev,
-       width = 8, 
-       height = 8, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
-
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/supplementary_Fig1.png", 
-       plot = anopheles_and_aedes_onnv,
-       width = 12, 
-       height = 12, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
-
-
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/supplementary_Fig2.png", 
-       plot = loglik_plot,
-       width = 10, 
-       height = 6,
-       units = "in", 
-       dpi = 300,
-       bg = "white")
-
-
-
-
-
 
 # ---ONNV with population density 
 # First create the density column in your data
@@ -348,6 +128,10 @@ df_onnv_pop <- calculate_prop_by_variable(
   breaks_min = popdenmin)
 
 summary(df_onnv_pop$log_model)
+
+
+
+
 
 
 
@@ -513,52 +297,5 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/xStarPres/multisero_mosquit
        units = "in", 
        dpi = 300,
        bg = "white")
-
-
-
-
-# --- Multisero probs with mosquito distributions 
-
-# Funestus
-df_fun <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels,
-  var_col = "fun_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'a', # a = ONNV
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
-
-# Gambiae
-df_gam <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels, 
-  var_col = "gam_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'a',  # a = ONNV
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
-
-# Aegypti
-df_aegypti <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels,
-  var_col = "aeg_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'a',  # a = ONNV
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
-# Albopictus
-df_albopictus <- calculate_prop_by_variable_multisero_probs(
-  data = meta_data_with_labels,
-  var_col = "alb_pw_district", 
-  chains_df = chains_df,
-  infM = preprocessed_data$data$infM,
-  pathogen_col = 'a',  # a = ONNV
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
-
-
-
 
 

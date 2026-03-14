@@ -58,7 +58,6 @@ missing_districts_geometeries <- read_excel("/Users/ap2488/Desktop/Cameroon_Anal
 # drop NAs 
 nrow(meta_data) #633
 length(unique(tolower(meta_data$DistrictOfresidence))) #208
-View(unique(tolower(meta_data$DistrictOfresidence)))
 
 
 sum(is.na(meta_data$CHIKV_sE2)) #920
@@ -515,16 +514,16 @@ sf_meta_data_with_coords_pw_filtered <- sf_meta_data_with_coords_pw_filtered %>%
     pop_density = Total_Population / area_km2,
     log_pop_density = log(pop_density + 1)  # +1 to avoid log(0) issues
   )
+  nrow(sf_meta_data_with_coords_pw_filtered)
 
 
-
-saveRDS(sf_meta_data_with_coords_pw_filtered, '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_with_coords.rds')
+saveRDS(sf_meta_data_with_coords_pw_filtered, here('Results/meta_data_with_coords.rds'))
 
 # Also save dataframe without geometry for Stan Multisero model
 preprocessed_meta_data_without_coords <- sf_meta_data_with_coords_pw_filtered %>%
   sf::st_drop_geometry()
 write.csv(preprocessed_meta_data_without_coords, 
-          '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv', 
+          here('Results/meta_data_without_coords.csv'), 
           row.names = FALSE)
 
 

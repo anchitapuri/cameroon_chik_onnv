@@ -295,8 +295,6 @@ lli[1, 3:5] <- quantile(chains_df_full$sumloglik,c(0.5, 0.025, 0.975))
 lli[2, 3:5] <- quantile(chains_df_chik$sumloglik, c(0.5, 0.025, 0.975))
 lli[3, 3:5] <- quantile(chains_df_onnv$sumloglik, c(0.5, 0.025, 0.975))
 
-lli <- lli |>
-  dplyr::mutate(model = fct_reorder(model, med))  # order by descending log-likelihood
 
 # save log-likelihood summary
 write.csv(lli, here("Results/loglik_model_comparison.csv"), row.names = FALSE)

@@ -630,9 +630,6 @@ plot_age_seroprevalence_model_fits <- function(result, data, model_data, chains_
   # Keep the id for proper alignment
   kept_ids <- data_plot$id
   
-  # Track original row numbers before any filtering
-  #data_plot$original_row <- as.numeric(rownames(data_plot))
-  
   # Age groups
   age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
   age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30",
@@ -772,184 +769,12 @@ plot_age_seroprevalence_model_fits <- function(result, data, model_data, chains_
 }
 
 
-# --- Seroprevalence by age group by year and gender - model fits ---
-plot_age_seroprevalence_model_fits_by_gender <- function(result, data, model_data, chains_df, infM, pathogen_col) {
-  
-  # Recreate the filtered dataset used in the model
-  data_plot <- data
-  # drop NA from cluster --> this ensure meta_data_with_labels == chains_df
-  meta_data_with_labels <- meta_data_with_labels[!is.na(meta_data_with_labels$cluster), ]
-
-  # Age groups
-  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
-  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30",
-                  "31-39", "40-49", "50+")
-  
-  data_plot$age_group <- cut(
-    data_plot$AgeInYears,
-    breaks = age_breaks,
-    labels = age_labels,
-    include.lowest = TRUE,
-    right = FALSE
-  )
-  
-  # Attach fitted values from estimation stack (INLA predictions)
-  idx_est <- inla.stack.index(result$stk.full, tag = "est")$data
-  fit <- result$output$summary.fitted.values[
-    idx_est, c("mean", "0.025quant", "0.975quant")
-  ]
-
-  # Attach INLA predicted probabilities to each individual
-  # This assumes fit rows align with rows in data_plot after filtering
-  data_plot <- data_plot %>%
-    dplyr::mutate(
-      predicted = fit$mean,
-      pred_lower = fit$`0.025quant`,
-      pred_upper = fit$`0.975quant`
-    )
-
-  # select only the rows that have non NA sex 
-  # Filter to Male / Female only
-  data_plot <- data_plot[data_plot$Sex %in% c(1, 2), ]
-
-   # Keep the id for proper alignment
-  kept_ids <- data_plot$id
-
-  
-  # Sex labels
-  data_plot$sex_label <- factor(
-    data_plot$Sex,
-    levels = c(1, 2),
-    labels = c("Male", "Female")
-  )
-  
-  # ---- Observed summaries using posterior probabilities from chains ----
-  # Find which components have pathogen_col = 1
-  nC <- nrow(infM)
-  positive_components <- which(infM[, pathogen_col] == 1)
-
-  matched_idx <- match(kept_ids, model_data$id)
-  cat("Any NA in posterior match:", any(is.na(matched_idx)), "\n")
-  
-  # Find the columns in chains_df corresponding to the kept ids
-  prob_cols_list <- lapply(positive_components, function(comp) {
-    sprintf("post_prob[%d,%d]", matched_idx, comp)
-  })
-  
-  # Sum probabilities across all positive components for each draw
-  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
-    as.matrix(chains_df[, cols])
-  }))
-  
-  n_draws <- nrow(probs_all_draws)
-  
-  # Calculate prevalence by year, age group, and sex for each draw
-  prevalence_draws <- purrr::map_dfr(1:n_draws, function(draw_num) {
-    probs_this_draw <- probs_all_draws[draw_num, ]
-    data_plot %>%
-      dplyr::mutate(prob_pos = probs_this_draw) %>%
-      dplyr::group_by(year_of_survey, age_group, sex_label) %>%
-      dplyr::summarise(
-        prevalence = mean(prob_pos, na.rm = TRUE),
-        n = dplyr::n(),
-        .groups = "drop"
-      ) %>%
-      dplyr::mutate(draw = draw_num)
-  })
-  
-  # Summarize observed data across draws
-  obs <- prevalence_draws %>%
-    dplyr::group_by(year_of_survey, age_group, sex_label) %>%
-    dplyr::summarise(
-      obs_mean = median(prevalence),
-      obs_lower = quantile(prevalence, 0.025),
-      obs_upper = quantile(prevalence, 0.975),
-      n = first(n),
-      .groups = "drop"
-    )
-  
-  # ---- Predicted summaries (mean of INLA predicted probabilities) ----
-  pred <- aggregate(
-    cbind(predicted, pred_lower, pred_upper) ~ year_of_survey + age_group + sex_label,
-    data_plot,
-    mean,
-    na.rm = TRUE
-  )
-  
-  # Add labels for plotting
-  obs$series <- paste(obs$sex_label, "Observed")
-  pred$series <- paste(pred$sex_label, "Estimated")
-
-  # add jitter 
-  pd <- position_dodge(width = 0.5)
-
-  # ---- Plot ----
-  p <- ggplot() +
-    geom_point(
-      data = obs,
-      aes(x = age_group, y = obs_mean, color = series),
-      size = 4,
-      position = pd
-
-    ) +
-    geom_errorbar(
-      data = obs,
-      aes(x = age_group, ymin = obs_lower, ymax = obs_upper, color = series),
-      width = 0.15,
-      position = pd
-    ) +
-    geom_point(
-      data = pred,
-      aes(x = age_group, y = predicted, color = series),
-      size = 4,
-      position = pd
-    ) +
-    geom_errorbar(
-      data = pred,
-      aes(x = age_group, ymin = pred_lower, ymax = pred_upper, color = series),
-      width = 0.15,
-      position = pd
-    ) +
-    scale_color_manual(
-      name = "",
-      values = c(
-        "Male Observed" = "#0f4c5c",
-        "Male Estimated" = "#33cef5",
-        "Female Observed" = "#570329",
-        "Female Estimated" = "#c42f72"
-      )
-    ) +
-    facet_wrap(~ year_of_survey, ncol = 5) +
-    labs(
-      x = "Age group",
-      y = "Proportion seropositive"
-    ) +
-    theme(
-      panel.grid = element_blank(),
-      panel.background = element_rect(fill = "white"),
-      axis.line = element_line(color = "black", linewidth = 0.7),
-      axis.ticks.x = element_line(color = "black", size = 0.5),
-      axis.ticks.y = element_line(color = "black", size = 0.5),
-      legend.position.inside = c(0.95, 0.5),
-      axis.text = element_text(size = 20),
-      axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
-      axis.title = element_text(size = 24),
-      aspect.ratio = 1.2,
-      legend.text = element_text(size = 20),
-      legend.title = element_text(size = 20),
-      strip.text = element_text(size = 20),
-      strip.background = element_rect(fill = "#ffffff")
-    )
-  
-  print(p)
-  invisible(list(plot = p, obs = obs, pred = pred, prevalence_draws = prevalence_draws))
-}
-
 
 # --- Seroprevalence by age group by year and gender ---
-plot_age_seroprevalence_model_fits_by_gender_bars_points <- function(result, data, model_data, chains_df, infM, pathogen_col) {
+plot_age_seroprevalence_model_fits_by_gender <- function(result, data, model_data, chains_df, infM, pathogen_col) {
   
   data_plot <- data
+  model_data <- model_data[!is.na(model_data$cluster), ]
   
   # Derived variables
   data_plot$year_of_survey <- as.numeric(substr(data_plot$Sample, 1, 4))
@@ -1059,9 +884,8 @@ plot_age_seroprevalence_model_fits_by_gender_bars_points <- function(result, dat
       data = obs,
       aes(x = age_group, y = obs_mean, fill = sex_label),
       position = pd,
-      width = 0.65,
-      alpha = 0.8,
-      colour = "black",
+      width = 0.8,
+      alpha = 0.6,
       linewidth = 0.2
     ) +
     # Model fit points
@@ -1069,7 +893,7 @@ plot_age_seroprevalence_model_fits_by_gender_bars_points <- function(result, dat
       data = pred,
       aes(x = age_group, y = predicted,group = sex_label),
       position = pd,
-      size = 2.8,
+      size = 4,
       colour = "black", 
     ) +
     # Model fit CI
@@ -1077,8 +901,8 @@ plot_age_seroprevalence_model_fits_by_gender_bars_points <- function(result, dat
       data = pred,
       aes(x = age_group, ymin = pred_lower, ymax = pred_upper, group = sex_label),
       position = pd,
-      width = 0.15,
-      linewidth = 0.9,
+      width = 0.1,
+      linewidth = 0.5,
       colour = "black",
     ) +
     facet_wrap(~ year_of_survey, ncol = 5) +
@@ -1100,10 +924,12 @@ plot_age_seroprevalence_model_fits_by_gender_bars_points <- function(result, dat
       axis.text = element_text(size = 20),
       axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
       axis.title = element_text(size = 24),
-      aspect.ratio = 1.2,
       legend.text = element_text(size = 18),
       legend.title = element_text(size = 18),
       strip.text = element_text(size = 20),
+      panel.border = element_blank(),
+      aspect.ratio = 1.2,
+      legend.position = "bottom",
       strip.background = element_rect(fill = "#ffffff")
     )
   

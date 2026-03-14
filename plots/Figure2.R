@@ -97,7 +97,7 @@ fig2 <- distfits$fitPN / (titres_plot | p_CR$p | p_sero)  +
   )
 print(fig2)
 ggsave(
-  filename =  here('Results/Figure2.png'),
+  filename =  here('Results/Fig2.png'),
   plot = fig2,
   width = 20,
   height = 12,
