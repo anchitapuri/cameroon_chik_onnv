@@ -51,7 +51,7 @@ unique(meta_data_chik_onnv_model$year_of_survey)
 
 # onnv samples == including 920 samples that were NA for CHIK and thus removed in the full model
 meta_data_onnv_samples_model <- meta_data %>%
-  drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP) %>%
+  drop_na(MAYV_E2, ONNV_VLP) %>%
   mutate(stan_idx_full_model = row_number()) 
 nrow(meta_data_onnv_samples_model)
 
@@ -224,14 +224,15 @@ for (n in 1:N) {
 
 cluster_label <- max.col(prob_matrix, ties.method = "first") #returns leftmost if two cols have equal (and max) prob
 cluster_prob <- apply(prob_matrix, 1, max)
+table(cluster_label)
 
-cluster_df <- meta_data_full_model |>
+
+cluster_df <- meta_data_chik_onnv_model |>
   dplyr::select(id, stan_idx_full_model) |>   # <-- add stan_idx here
   dplyr::mutate(
     cluster = cluster_label,
     cluster_prob = cluster_prob
   )
-
 meta_data <- meta_data |>
   dplyr::left_join(cluster_df, by = "id")
 
@@ -261,7 +262,6 @@ write.csv(meta_data, here("Results/meta_data_with_labels.csv"), row.names = FALS
 
 
 # --- Comparison to other models
-
 onnv_samples_fit <- readRDS("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/fit_onnv_samples_model.rds")
 
 # --- 1) Compare estimtes of Full ONNV only model (with all samples) with ONNV+CHIK model (with 920 samples removed that were NA for CHIK)
@@ -287,6 +287,43 @@ write_xlsx(
   ),
   path = here("Results/onnv_samples_model_posterior_estimates.xlsx")
 )
+
+# cluster labels for ONNV only model (with all samples)
+N_onnv_samples <- preprocessed_data_onnv_samples_model$data$N
+nC_onnv_samples <- preprocessed_data_onnv_samples_model$data$nC
+draws_post_onnv_samples <- as_draws_df(onnv_samples_fit$draws("post_prob"))
+prob_matrix_onnv_samples <- matrix(NA_real_, nrow = N_onnv_samples, ncol = nC_onnv_samples)
+for (n in 1:N_onnv_samples) {
+  for (c in 1:nC_onnv_samples) {
+    prob_matrix_onnv_samples[n, c] <- mean(draws_post_onnv_samples[[sprintf("post_prob[%d,%d]", n, c)]])
+  }
+}     
+
+cluster_label_onnv_samples <- max.col(prob_matrix_onnv_samples, ties.method = "first") #returns leftmost if two cols have equal (and max) prob
+cluster_prob_onnv_samples <- apply(prob_matrix_onnv_samples, 1, max)    
+table(cluster_label_onnv_samples)
+
+cluster_df_onnv_samples <- meta_data_onnv_samples_model |>
+  dplyr::select(id, stan_idx_full_model) |>   # <-- add stan_idx here
+  dplyr::mutate(
+    cluster = cluster_label_onnv_samples,
+    cluster_prob = cluster_prob_onnv_samples
+  )
+
+meta_data_onnv_samples <- meta_data
+meta_data_onnv_samples <- meta_data_onnv_samples |>
+  dplyr::left_join(cluster_df_onnv_samples, by = "id")
+
+
+# label 2 == ONNV pos
+meta_data_onnv_samples$ONNV_pos <- as.integer(meta_data_onnv_samples$cluster == 2)
+table(meta_data_onnv_samples$ONNV_pos)
+nrow(meta_data_onnv_samples)
+
+#save meta data with cluster labels and probabilities
+write.csv(meta_data_onnv_samples, here("Results/meta_data_onnv_samples_with_labels.csv"), row.names = FALSE)
+
+
 
 
 # --- 2) Compare ONNV+CHIK, ONNV only and CHIK only models

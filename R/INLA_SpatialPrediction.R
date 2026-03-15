@@ -70,6 +70,10 @@ meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
 colnames(meta_data_with_labels)
 nrow(meta_data_with_labels)
 
+meta_data_onnv_samples <- read.csv(here('Results/meta_data_onnv_samples_with_labels.csv'))
+nrow(meta_data_onnv_samples)
+
+
 # Convert coords to Easting and Northing
 sp_vill <- SpatialPoints(cbind(meta_data_with_labels$Longitude, meta_data_with_labels$Latitude))
 points_to_extract <- terra::vect(sp_vill)
@@ -91,9 +95,12 @@ meta_data_with_coords$Northing <- coords_utm[, "Northing"]
 meta_data_with_labels$Easting <- meta_data_with_coords$Easting
 meta_data_with_labels$Northing <- meta_data_with_coords$Northing
 
+meta_data_onnv_samples$Easting <- meta_data_with_coords$Easting
+meta_data_onnv_samples$Northing <- meta_data_with_coords$Northing
+
+
 model_data <- meta_data_with_labels
-colnames(model_data)
-nrow(model_data)
+model_data_onnv_samples <- meta_data_onnv_samples
 
 sum(is.na(model_data$AgeInYears))
 sum(model_data$AgeInYears == 0, na.rm = TRUE)
@@ -107,8 +114,17 @@ onnv_results_pop_grid <- run_inla(
   cam_pop = cam_pop,
   positive_col = "ONNV_pos")
 
+
+# --- Run INLA model for ONNV (with historic year of intro 1900)
+onnv_results_pop_grid_onnv_samples <- run_inla(
+  year_intro = 1900,
+  data = model_data_onnv_samples,
+  cam_pop = cam_pop,
+  positive_col = "ONNV_pos")
+
 # --- Save prediction results 
 saveRDS(onnv_results_pop_grid, here('Results/ONNV_INLAResults.rds'))
+saveRDS(onnv_results_pop_grid_onnv_samples, here('Results/ONNV_INLAResults_ONNV_samples.rds'))
 # Read saved results
 onnv_results_pop_grid <- readRDS(here('Results/ONNV_INLAResults.rds'))
 
@@ -123,7 +139,16 @@ est_cameroonwide_foi <- list(
   ciL  = exp(foi_summary$`0.025quant`),
   ciU  = exp(foi_summary$`0.975quant`)
 )
+est_cameroonwide_foi
 
+
+foi_summary_onnv_samples <- onnv_results_pop_grid_onnv_samples$output$summary.fixed
+est_cameroonwide_foi_onnv_samples <- list(
+  mean = exp(foi_summary_onnv_samples$mean),
+  ciL  = exp(foi_summary_onnv_samples$`0.025quant`),
+  ciU  = exp(foi_summary_onnv_samples$`0.975quant`)
+)
+est_cameroonwide_foi_onnv_samples
 
 # -- cameroon wide summary 
 compute_foi_metrics <- function(foi_val, age_groups, w_age, cam_pop, total_cameroon_pop) {
