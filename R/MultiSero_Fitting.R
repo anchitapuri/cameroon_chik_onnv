@@ -262,10 +262,12 @@ write.csv(meta_data, here("Results/meta_data_with_labels.csv"), row.names = FALS
 
 # --- Comparison to other models
 
+onnv_samples_fit <- readRDS("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/fit_onnv_samples_model.rds")
 
 # --- 1) Compare estimtes of Full ONNV only model (with all samples) with ONNV+CHIK model (with 920 samples removed that were NA for CHIK)
-chains_onnv_samples <- fit_onnv_samples_model$draws(format='df')
+chains_onnv_samples <- onnv_samples_fit$draws(format='df')
 chains_df_onnv_samples <- as.data.frame(chains_onnv_samples)
+preprocessed_data_onnv_samples_model <- readRDS("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/preprocessed_data_onnv_samples_only_model.rds")
 
 # Model 2 
 sero_onnv_samples <- extract_sero(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, 
@@ -277,8 +279,9 @@ sds_onnv_samples <- extract_sd(chains_df_onnv_samples, preprocessed_data_onnv_sa
 # save estimates
 write_xlsx(
   list(
-    phi  = phi_onnv_samples,
-    mu   = mu_onnv_samples,
+    phi  = phi_onnv_samples$phi,
+    mu_neg   = mu_onnv_samples$mus0,
+    mu_pos = mu_onnv_samples$mus1,
     sero = sero_onnv_samples,
     sds  = sds_onnv_samples
   ),

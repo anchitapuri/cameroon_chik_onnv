@@ -131,11 +131,6 @@ summary(df_onnv_pop$log_model)
 
 
 
-
-
-
-
-
 # vectors + CHIK and ONNV all in one plot 
 virus_colors <- c(
   CHIK = "#2e86ab",

@@ -306,3 +306,8 @@ cat("Estimated number of deaths per year:", death, "(", death_ciL, ",", death_ci
 
 
 
+# supplementary data - region level prediction 
+
+# supplementary data 
+region_level_predictions <- readRDS(here("Results/region_level_predictions.rds"))
+region_level_predictions

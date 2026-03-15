@@ -393,8 +393,3 @@ ggsave("Results/supplementary_fig3.png",
 
 
 
-
-# supplementary data 
-
-region_level_predictions <- readRDS(here("Results/region_level_predictions.rds"))
-region_level_predictions
