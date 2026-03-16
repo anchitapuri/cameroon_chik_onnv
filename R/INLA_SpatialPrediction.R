@@ -98,6 +98,8 @@ meta_data_with_labels$Northing <- meta_data_with_coords$Northing
 meta_data_onnv_samples$Easting <- meta_data_with_coords$Easting
 meta_data_onnv_samples$Northing <- meta_data_with_coords$Northing
 
+range(meta_data_with_labels$AgeInYears, na.rm = TRUE)
+
 
 model_data <- meta_data_with_labels
 model_data_onnv_samples <- meta_data_onnv_samples
@@ -295,10 +297,11 @@ saveRDS(region_level_predictions, here('Results/region_level_predictions.rds'))
 average_annual_infections <- metrics_mean$infections
 ciL_annual_infections <- metrics_ciL$infections
 ciU_annual_infections <- metrics_ciU$infections
+
 prob_disease <- 0.5 # assuming same as CHIKV
 prob_mild <- 0.88 # Given disease, probability of it being mild (from Gabrial paper)
 prob_severe <- 0.12  # Given disease, probability of it being severe (from Gabrial paper)
-prob_medically_attended <- 1.13
+prob_medically_attended <- 0.0113
 prob_chronic_given_severe <- 0.44 #  Kang et al 
 
 # acute cases 
@@ -307,27 +310,24 @@ acute_cases_ciL <- ciL_annual_infections * prob_disease
 acute_cases_ciU <- ciU_annual_infections * prob_disease 
 
 
-
-cat("Estimated number of acute cases per year:", acute_cases, "(", acute_cases_ciL, ",", acute_cases_ciU, ")\n")
+cat("Estimated number of acute cases per year:", acute_cases)
 
 # chronic arthlgic cases
 #arthralgic_cases  <- average_annual_infections * prob_disease * prob_severe * prob_chronic_given_severe
 #arthralgic_cases_ciL  <- ciL_annual_infections * prob_disease * prob_severe * prob_chronic_given_severe
 #arthralgic_cases_ciU  <- ciU_annual_infections * prob_disease * prob_severe * prob_chronic_given_severe
 
-arthralgic_cases  <- average_annual_infections * prob_disease * prob_medically_attended/2 
-
+arthralgic_cases  <- average_annual_infections  * prob_medically_attended/2 
 
 cat("Estimated number of arthralgic cases per year:", arthralgic_cases)
 
 prob_ifr <- 4.2 * 10^-5 #in Brazil, 
 
-death <- average_annual_infections * prob_disease * prob_ifr
+death <- average_annual_infections  * prob_ifr
 death_ciL <- ciL_annual_infections * prob_disease * prob_ifr
 death_ciU <- ciU_annual_infections * prob_disease * prob_ifr
 
-cat("Estimated number of deaths per year:", death, "(", death_ciL, ",", death_ciU, ")\n")
-
+cat("Estimated number of deaths per year:", death)
 
 
 
@@ -336,3 +336,55 @@ cat("Estimated number of deaths per year:", death, "(", death_ciL, ",", death_ci
 # supplementary data 
 region_level_predictions <- readRDS(here("Results/region_level_predictions.rds"))
 region_level_predictions
+
+
+# comparison of malaria risk with ONNV risk 
+# Number of newly diagnosed Plasmodium falciparum cases per 1,000 population (using 2024)
+
+pf <- terra::rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/clippedlayers-4/202508_Global_Pf_Incidence_Rate_CMR_2024.tiff')
+pf_rate <- pf[[1]]  # band 1 = incidence rate
+
+global(pf_rate, fun = c("min", "max"), na.rm = TRUE)
+
+points_vect <- terra::vect(data_points)
+meta_data_with_coords$pf_incidence <- terra::extract(
+  pf_rate,
+  points_vect
+)[,2]
+
+meta_data_with_labels$pf_incidence <- meta_data_with_coords$pf_incidence
+summary(meta_data_with_labels$pf_incidence)
+
+
+breaks <- seq(
+  min(meta_data_with_labels$pf_incidence, na.rm = TRUE),
+  max(meta_data_with_labels$pf_incidence, na.rm = TRUE),
+  length.out = 8
+)
+
+onnv_pf_incidence <- calculate_prop_by_variable(
+  data = meta_data_with_labels,
+  var_col = "pf_incidence",
+  positive_col = "ONNV_pos",
+  breaks_max = breaks[-1],
+  breaks_min = breaks[-length(breaks)]
+)
+
+summary(onnv_pf_incidence$log_model)
+
+prop_pf_onnv <- make_plot_onnv(
+  onnv_pf_incidence$obs,
+  meta_data_with_labels$pf_incidence,
+  "Pf Incidence",
+  color ="#16622b", pos_col =  "ONNV_pos"
+)
+print(prop_pf_onnv)
+
+
+ggsave("Results/supplementary_fig4.png", 
+       plot = prop_pf_onnv,
+       width = 6, 
+       height = 8, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")

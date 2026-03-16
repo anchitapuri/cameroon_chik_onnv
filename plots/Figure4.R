@@ -50,14 +50,19 @@ ggsave(here('Results/Fig4a.png'),
 
 
 # CHIK cases 
+
 chik_pos <- onnv_results_pop_grid$data_filtered |>
-  dplyr::filter(CHIK_pos == 1)%>%
-  count(district_lower) %>%  
+  dplyr::filter(CHIK_pos == 1)
+
+chik_pos <- chik_pos %>%
+  count(district_lower) %>%
   left_join(
-    chik_pos %>% distinct(district_lower, Longitude, Latitude),  # single coord per district
+    chik_pos %>% distinct(district_lower, Longitude, Latitude),
     by = "district_lower"
   ) %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
+
+
 
 set.seed(42)  # for reproducibility
 chik_centroids_jittered <- chik_pos |>
