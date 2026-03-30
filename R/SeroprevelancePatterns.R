@@ -136,13 +136,6 @@ df_onnv_pop <- calculate_prop_by_variable(
 
 summary(df_onnv_pop$log_model)
 
-# gender differences 
-model_gender <- glm(
-  ONNV_pos ~ Sex,
-  data = meta_data_with_labels,
-  family = binomial
-)
-summary(model_gender)
 
 
 # CHIK with vectors 

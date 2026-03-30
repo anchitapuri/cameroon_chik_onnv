@@ -62,3 +62,13 @@ ggsave(here("Results/Fig3.png"),
        units = "in", 
        dpi = 300,
        bg = "white")
+
+
+
+# differences in gender
+model_gender <- glm(
+  ONNV_pos ~ Sex,
+  data = meta_data_with_labels,
+  family = binomial
+)
+summary(model_gender)
