@@ -769,7 +769,6 @@ plot_age_seroprevalence_model_fits <- function(result, data, model_data, chains_
 }
 
 
-
 # --- Seroprevalence by age group by year and gender ---
 plot_age_seroprevalence_model_fits_by_gender <- function(result, data, model_data, chains_df, infM, pathogen_col) {
   
@@ -1021,7 +1020,6 @@ calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, 
       data[[var_col]] < breaks_max[i] &
       data[[var_col]] >= breaks_min[i]
     )
-
 
 
     if (length(tmp) > 5) {

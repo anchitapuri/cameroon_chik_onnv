@@ -70,8 +70,11 @@ meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
 colnames(meta_data_with_labels)
 nrow(meta_data_with_labels)
 
+unique(meta_data_with_labels$year_of_survey)
+
 meta_data_onnv_samples <- read.csv(here('Results/meta_data_onnv_samples_with_labels.csv'))
 nrow(meta_data_onnv_samples)
+
 
 
 # Convert coords to Easting and Northing
@@ -372,6 +375,7 @@ onnv_pf_incidence <- calculate_prop_by_variable(
 )
 
 summary(onnv_pf_incidence$log_model)
+
 
 prop_pf_onnv <- make_plot_onnv(
   onnv_pf_incidence$obs,

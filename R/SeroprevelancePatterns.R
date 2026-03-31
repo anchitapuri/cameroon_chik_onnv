@@ -101,6 +101,7 @@ prop_gam_prev <- make_plot_onnv(
   color ="#165262", pos_col =  "ONNV_pos"
 )
 
+
 ggsave("Results/fig4d.png", 
        plot = prop_gam_prev,
        width = 6, 
