@@ -1,7 +1,39 @@
 
+# Load population by gender / age data 
+cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/CameroonAge2025.csv')
+cameroon_age_2025 <- cameroon_age_2025 %>%
+  mutate(total = M + F)
+
 
 # read preprocessed data 
-meta_data_with_coords.rds <- readRDS(here('Results/meta_data_with_coords.rds'))
+meta_data_with_coords <- readRDS(here('Results/meta_data_with_coords.rds'))
+nrow(meta_data_with_coords) #6324
+
+
+nrow(meta_data_with_coords) #6324
+sum(is.na(meta_data_with_coords$Sex)) #21
+sum(meta_data_with_coords$Sex == 9, na.rm = TRUE) #9 
+sum(is.na(meta_data_with_coords$AgeInYears)) # 6 
+table(meta_data_with_coords$Sex)
+
+
+# # Drop NAs and age = 0 and sex = 9 
+meta_data_clean <- subset(
+  meta_data_with_coords,
+  !is.na(CHIKV_sE2) &
+  !is.na(ONNV_VLP) &
+  !is.na(MAYV_E2) &
+  !is.na(AgeInYears) &
+  AgeInYears != 0 &
+  !is.na(Sex) &
+  Sex != 9
+)
+nrow(meta_data_clean) #5272
+
+
+preprocessed_data_full_model <- readRDS('Results/preprocessed_data_full_model.rds')
+nrow(preprocessed_data_full_model$data$y) #5398
+
 
 
 # Load population rasters
@@ -10,7 +42,7 @@ cam_pop_den <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_pd_2020_1k
 
 
 # --- Figure 1 ----
-location_counts <- sf_meta_data_with_coords_pw_filtered %>%
+location_counts <- meta_data_clean %>%
   st_drop_geometry() %>%  # Remove spatial features
   group_by(district_lower, Longitude, Latitude) %>%
   summarise(n_samples = n(), .groups = 'drop')
@@ -51,7 +83,7 @@ inset_map <- ggplot(cam_pop_df, aes(x = x, y = y, fill = pop_density)) +
 
 # Figure 1a: Map of Cameroon with sample collection locations
 fig1a <- ggplot() +
-  geom_sf(data = sf_meta_data_with_coords_pw_filtered, fill = "#ffffff", color = "#6d7275") +
+  geom_sf(data = meta_data_clean, fill = "#ffffff", color = "#6d7275") +
   geom_point(data = location_counts, 
              aes(x = Longitude, y = Latitude, size = n_samples),
              shape = 21, fill = "#015b69", colour = "white", alpha = 0.85) +
@@ -77,7 +109,7 @@ fig1a <- ggplot() +
     legend.key.height = unit(0.4, "cm"),
     legend.spacing.y  = unit(0.2, "cm")
   )
-quartz()
+
 fig1a_with_inset <- fig1a +
   inset_element(
     inset_map, left = -1, bottom = 0.5, right = 1, top = 1, align_to = 'plot')
@@ -94,7 +126,7 @@ ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1a.png",
        bg = "white")
 
 # Figure 1b: Number of samples by year of survey
-fig1b <- sf_meta_data_with_coords_pw_filtered %>%
+fig1b <- meta_data_clean %>%
   st_drop_geometry() %>%  # Remove geometry for plotting
   group_by(year_of_survey) %>%
   summarise(n_samples = n()) %>%
@@ -135,17 +167,12 @@ summarise(
   total_M = sum(M),
   total_F = sum(F)
 )
-nrow(sf_meta_data_with_coords_pw_filtered) #6324
-sum(is.na(sf_meta_data_with_coords_pw_filtered$Sex)) #21
-sum(sf_meta_data_with_coords_pw_filtered$Sex == 9, na.rm = TRUE) #9 
-sum(is.na(sf_meta_data_with_coords_pw_filtered$AgeInYears)) # 6 
-table(sf_meta_data_with_coords_pw_filtered$Sex)
 
 # Mean age = 18
 mean(sf_meta_data_with_coords_pw_filtered$AgeInYears, na.rm = TRUE)
 
 
-pyramid_data <- sf_meta_data_with_coords_pw_filtered %>%
+pyramid_data <- meta_data_clean %>%
   st_drop_geometry() %>%
   filter(!is.na(Sex), !is.na(AgeInYears)) %>%
   mutate(

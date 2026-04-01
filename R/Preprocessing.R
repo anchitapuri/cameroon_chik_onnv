@@ -528,12 +528,13 @@ write.csv(preprocessed_meta_data_without_coords,
 
 
 
-
-
+sf_meta_data_with_coords_pw_filtered <- readRDS('Results/meta_data_with_coords.rds')
+preprocessed_meta_data_without_coords <- read.csv('Results/meta_data_without_coords.csv')
+nrow(preprocessed_meta_data_without_coords)
 
 # # Drop NAs and age = 0 and sex = 9 
-meta_data_clean <- subset(
-  meta_data,
+meta_data_clean_with_coords <- subset(
+  sf_meta_data_with_coords_pw_filtered,
   !is.na(CHIKV_sE2) &
   !is.na(ONNV_VLP) &
   !is.na(MAYV_E2) &
@@ -543,5 +544,42 @@ meta_data_clean <- subset(
   Sex != 9
 )
 
-nrow(meta_data_clean) #5280
-nrow(meta_data) - nrow(meta_data_clean) # 1056 rows removed 
+# # Drop NAs and age = 0 and sex = 9 
+meta_data_clean_without_coords <- subset(
+  preprocessed_meta_data_without_coords,
+  !is.na(CHIKV_sE2) &
+  !is.na(ONNV_VLP) &
+  !is.na(MAYV_E2) &
+  !is.na(AgeInYears) &
+  AgeInYears != 0 &
+  !is.na(Sex) &
+  Sex != 9
+)
+
+
+nrow(meta_data_clean_with_coords) #5272
+nrow(meta_data_clean_without_coords) #5272
+
+# save RDS  - these are used for ALL downstream analysis 
+saveRDS(meta_data_clean_with_coords, here('Results/meta_data_clean_with_coords.rds'))
+saveRDS(meta_data_clean_without_coords, here('Results/meta_data_clean_without_coords.rds'))
+
+
+
+
+# save locally as well to run Stan 
+saveRDS(meta_data_clean_without_coords, ('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/meta_data_clean_without_coords.rds'))
+
+ # save another version with CHIK,ONNV and MAYV NAs 
+ # this is for supplementary materials - to show that results are similar when including all samples vs only those with complete data
+meta_data_without_coords_supp_materials <- subset(
+  preprocessed_meta_data_without_coords,
+  !is.na(AgeInYears) &
+  AgeInYears != 0 &
+  !is.na(Sex) &
+  Sex != 9
+)
+nrow(meta_data_without_coords_supp_materials) #6172
+
+saveRDS(meta_data_without_coords_supp_materials, ('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/meta_data_without_coords_supp_materials.rds'))
+saveRDS(meta_data_without_coords_supp_materials, here('Results/meta_data_without_coords_supp_materials.rds'))

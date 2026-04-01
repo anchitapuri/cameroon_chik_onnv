@@ -134,7 +134,7 @@ saveRDS(onnv_results_pop_grid_onnv_samples, here('Results/ONNV_INLAResults_ONNV_
 # Read saved results
 onnv_results_pop_grid <- readRDS(here('Results/ONNV_INLAResults.rds'))
 
-
+nrow(onnv_results_pop_grid$data_filtered)
 
 # --- SPATIAL PREDICTIONS: # Overall cameroon estimates ---- 
 
