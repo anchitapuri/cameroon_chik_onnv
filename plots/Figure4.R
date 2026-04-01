@@ -13,7 +13,7 @@ foi_onnv <- predicted_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pat
 range(foi_onnv$foi_df$foi)
 
 # --- Prob of seropositive proportion 
-sero_onnv <- plot_predicted_seroprevalence(
+sero_onnv <- predicted_seroprevalence(
   foi_result = foi_onnv,
   model = onnv_results_pop_grid,
   age_groups = age_groups,
@@ -24,7 +24,7 @@ sero_onnv <- plot_predicted_seroprevalence(
 
 
 # --- Annual Infections 
-infections_onnv <- plot_predicted_annual_infections(
+infections_onnv <- predicted_annual_infections(
   foi_result = foi_onnv,
   model = onnv_results_pop_grid,
   age_groups = age_groups,
@@ -38,7 +38,7 @@ infections_onnv <- plot_predicted_annual_infections(
 # combined plots 
 maps <- foi_onnv$plot + sero_onnv$plot + infections_onnv$plot  +  plot_layout(ncol = 3)
 
-
+print(maps)
 ggsave(here('Results/Fig4a.png'), 
        plot = maps,
        width = 10, 
@@ -50,7 +50,6 @@ ggsave(here('Results/Fig4a.png'),
 
 
 # CHIK cases 
-
 chik_pos <- onnv_results_pop_grid$data_filtered |>
   dplyr::filter(CHIK_pos == 1)
 

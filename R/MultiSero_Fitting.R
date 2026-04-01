@@ -32,9 +32,12 @@ model_path = here('/Users/ap2488/Documents/GitHub/cameroon_chik_onnv/StanModel/F
 mod = cmdstan_model(model_path, pedantic = FALSE, force_recompile = TRUE)
 
 # Import data file 
-meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/meta_data_without_coords.csv')
+meta_data <- readRDS(here('Results/meta_data_clean_without_coords.rds'))
 nrow(meta_data)
-unique(meta_data$year_of_survey)
+
+# This is used for the onnv samples modle 
+# this is to check that removing the 920 NA chik samples doesnt change results 
+meta_data_without_coords_supp_materials <- readRDS('Results/meta_data_without_coords_supp_materials.rds')
 
 # Remove NAs
 meta_data_chik_onnv_model <- meta_data %>%
@@ -50,10 +53,10 @@ meta_data_chik_onnv_model %>%
 unique(meta_data_chik_onnv_model$year_of_survey)
 
 # onnv samples == including 920 samples that were NA for CHIK and thus removed in the full model
-meta_data_onnv_samples_model <- meta_data %>%
+meta_data_onnv_samples_model <- meta_data_without_coords_supp_materials %>%
   drop_na(MAYV_E2, ONNV_VLP) %>%
   mutate(stan_idx_full_model = row_number()) 
-nrow(meta_data_onnv_samples_model)
+nrow(meta_data_onnv_samples_model) # 6155 
 
 
 # Log CHIK, ONNV and MAY
@@ -194,8 +197,8 @@ p1 <- mcmc_trace(fit_full_model$draws(c("seroAll", "lp__")))
 p2 <- mcmc_trace(fit_full_model$draws(c("mu0", "mu1")))
 p3 <- mcmc_trace(fit_full_model$draws(c('sd0','sd1')))
 p4 <- mcmc_trace(fit_full_model$draws(c('phi','rho00')))
-quartz()
 print(p1 + p2 + p3 + p4)
+
 
 
 # Save posterior estimates from full model
@@ -205,11 +208,16 @@ mu <- extract_mu(chains_df_full, preprocessed_data_full_model$data, pathogens=pr
 sero <- extract_sero(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
 sds <- extract_sd(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
 
+print(sero)
+
 # cross reactive titre incease 
 p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
 p_CR$plot_data
 print(p_CR)
 
+# cross reactive titre increase MAYYV
+p_CR_mayv <- titer_increases_comparison_mayv(phi$phi, mu$mus1)
+print(p_CR_mayv)
 
 # --- Cluster assignment based on max probability - For INLA analysis 
 N  <- preprocessed_data_full_model$data$N
@@ -226,6 +234,7 @@ cluster_label <- max.col(prob_matrix, ties.method = "first") #returns leftmost i
 cluster_prob <- apply(prob_matrix, 1, max)
 table(cluster_label)
 
+length(cluster_label)
 
 cluster_df <- meta_data_chik_onnv_model |>
   dplyr::select(id, stan_idx_full_model) |>   # <-- add stan_idx here
@@ -262,7 +271,7 @@ write.csv(meta_data, here("Results/meta_data_with_labels.csv"), row.names = FALS
 
 
 # --- Comparison to other models
-onnv_samples_fit <- readRDS("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/fit_onnv_samples_model.rds")
+onnv_samples_fit <- readRDS(here('Results/fit_onnv_samples_model.rds'))
 
 # --- 1) Compare estimtes of Full ONNV only model (with all samples) with ONNV+CHIK model (with 920 samples removed that were NA for CHIK)
 chains_onnv_samples <- onnv_samples_fit$draws(format='df')
@@ -383,7 +392,7 @@ mayv <- plot(fmm_normal_mayv) +  theme(axis.text.x = element_text(size = 14),
           axis.title.y = element_blank())
 
 mixture_models_fits <- chik + onnv + mayv 
-
+print(mixture_models_fits)
 
 
 # 2D mixture model fits with 50% threshold for comp2

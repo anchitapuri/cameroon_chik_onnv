@@ -26,7 +26,7 @@ onnv_results_pop_grid <- readRDS(here('Results/ONNV_INLAResults.rds'))
 # Read preprocessed data
 preprocessed_data_full_model <- readRDS(here('Results/preprocessed_data_full_model.rds'))
 meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
-
+nrow(meta_data_with_labels)
 
 
 # extract chains and parameters

@@ -61,7 +61,7 @@ if (grepl("\\+", age_groups$age_string[nrow(age_groups)])) {
 }
 
 # ----- Read preprocessed data with coords 
-meta_data_with_coords <- readRDS(here('Results/meta_data_with_coords.rds'))
+meta_data_with_coords <- readRDS(here('Results/meta_data_clean_with_coords.rds'))
 colnames(meta_data_with_coords)
 nrow(meta_data_with_coords)
 
@@ -71,6 +71,7 @@ colnames(meta_data_with_labels)
 nrow(meta_data_with_labels)
 
 unique(meta_data_with_labels$year_of_survey)
+
 
 meta_data_onnv_samples <- read.csv(here('Results/meta_data_onnv_samples_with_labels.csv'))
 nrow(meta_data_onnv_samples)
@@ -295,7 +296,7 @@ region_level_predictions <- list(
   infections = infection_region
 )
 saveRDS(region_level_predictions, here('Results/region_level_predictions.rds'))
-
+print(region_level_predictions)
 
 # Discussion - prob of disease,  acute cases, arthralgic cases and  deaths per year occur in Cameroon each year
 average_annual_infections <- metrics_mean$infections
@@ -347,7 +348,7 @@ region_level_predictions
 
 pf <- terra::rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/clippedlayers-4/202508_Global_Pf_Incidence_Rate_CMR_2024.tiff')
 pf_rate <- pf[[1]]  # band 1 = incidence rate
-
+  
 global(pf_rate, fun = c("min", "max"), na.rm = TRUE)
 
 points_vect <- terra::vect(data_points)

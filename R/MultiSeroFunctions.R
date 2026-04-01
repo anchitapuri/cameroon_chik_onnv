@@ -492,7 +492,7 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
                   width = 0.25, linewidth = 0.8) +
     facet_wrap(~ antigen_label) +
     scale_fill_manual(
-      values = c("ONNV" = "#ce4760", "CHIK" = "#028090"),
+      values = c("ONNV" = "#c7035b", "CHIK" = "#028eb1"),
       name = "Infecting pathogen"
     )  +
     labs(

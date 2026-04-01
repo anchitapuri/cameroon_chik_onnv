@@ -49,7 +49,7 @@ chains_df_full <- as.data.frame(chains_full)
 preprocessed_data_full_model <- readRDS('Results/preprocessed_data_full_model.rds')
 
 # meta data with labels and coordinates
-meta_data_with_coords <- readRDS('Results/meta_data_with_coords.rds')
+meta_data_with_coords <- readRDS('Results/meta_data_clean_with_coords.rds')
 meta_data_with_labels <- read.csv('Results/meta_data_with_labels.csv')
 
 

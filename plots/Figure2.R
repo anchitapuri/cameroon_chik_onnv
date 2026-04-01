@@ -31,6 +31,8 @@ meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
 preprocessed_data_full_model <- readRDS(here('Results/preprocessed_data_full_model.rds'))
 fit_full_model <- readRDS(here('Results/full_model_fits.rds'))
 
+nrow(meta_data_with_labels)
+
 
 # extract chains and parameters
 chains_full <- fit_full_model$draws(format='df')
@@ -43,9 +45,9 @@ phi <- extract_phi(chains_df_full, preprocessed_data_full_model$data, pathogens=
 distfits <- plot_fits(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens, 
                       show_crossreactive_for = seq_along(preprocessed_data_full_model$pathogens))
 distfits$fitPN 
-
+print(distfits$fitPN)
 ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/NEW_Fig2b.png',
+  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2a.png',
   plot = distfits$fitPN,
   width = 10,
   height = 8,
