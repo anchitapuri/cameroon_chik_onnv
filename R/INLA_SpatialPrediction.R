@@ -67,6 +67,23 @@ nrow(meta_data_with_coords)
 meta_data_with_coords_supp_materials <- readRDS(here('Results/meta_data_with_coords_supp_materials.rds'))
 nrow(meta_data_with_coords_supp_materials)
 
+meta_data_without_coords_supp_materials <- subset(
+  meta_data_with_coords_supp_materials,
+  !is.na(AgeInYears) &
+  AgeInYears != 0 &
+  !is.na(Sex) &
+  Sex != 9
+)
+meta_data_with_coords_supp_materials <- subset(
+  meta_data_with_coords_supp_materials,
+  !is.na(AgeInYears) &
+  AgeInYears != 0 &
+  !is.na(Sex) &
+  Sex != 9
+)
+nrow(meta_data_with_coords_supp_materials)
+
+
 # ----- Read labels data
 meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
 colnames(meta_data_with_labels)
@@ -77,7 +94,6 @@ unique(meta_data_with_labels$year_of_survey)
 
 meta_data_onnv_samples <- read.csv(here('Results/meta_data_onnv_samples_with_labels.csv'))
 nrow(meta_data_onnv_samples)
-
 
 
 # Convert coords to Easting and Northing
@@ -111,6 +127,7 @@ meta_data_with_coords_supp_materials$Northing <- coords_utm_supp_materials[, "No
 
 meta_data_with_labels$Easting <- meta_data_with_coords$Easting
 meta_data_with_labels$Northing <- meta_data_with_coords$Northing
+
 
 meta_data_onnv_samples$Easting <- meta_data_with_coords_supp_materials$Easting
 meta_data_onnv_samples$Northing <- meta_data_with_coords_supp_materials$Northing
@@ -148,7 +165,6 @@ saveRDS(onnv_results_pop_grid_onnv_samples, here('Results/ONNV_INLAResults_ONNV_
 # Read saved results
 onnv_results_pop_grid <- readRDS(here('Results/ONNV_INLAResults.rds'))
 
-nrow(onnv_results_pop_grid$data_filtered)
 
 # --- SPATIAL PREDICTIONS: # Overall cameroon estimates ---- 
 
@@ -160,6 +176,7 @@ est_cameroonwide_foi <- list(
   ciU  = exp(foi_summary$`0.975quant`)
 )
 est_cameroonwide_foi
+
 
 
 foi_summary_onnv_samples <- onnv_results_pop_grid_onnv_samples$output$summary.fixed
