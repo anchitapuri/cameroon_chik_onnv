@@ -38,7 +38,7 @@ nrow(meta_data)
 # This is used for the onnv samples modle 
 # this is to check that removing the 920 NA chik samples doesnt change results 
 meta_data_without_coords_supp_materials <- readRDS('Results/meta_data_without_coords_supp_materials.rds')
-
+nrow(meta_data_without_coords_supp_materials)
 # Remove NAs
 meta_data_chik_onnv_model <- meta_data %>%
   drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP) %>%
@@ -73,14 +73,14 @@ full_model_alpha <- meta_data_chik_onnv_model %>%
 nrow(full_model_alpha)
 
 onnv_samples_model_alpha <- meta_data_onnv_samples_model %>%
-  dplyr::select(CHIKV_sE2_log, MAYV_E2_log, ONNV_VLP_log)
+  dplyr::select(MAYV_E2_log, ONNV_VLP_log)
 nrow(onnv_samples_model_alpha)
 
 
 # pathogen names for the model 
 pathogens_full_model = c("ONNV_VLP_log","CHIKV_sE2_log","MAYV_E2_log")
 pathogens_chik_model = c("CHIKV_sE2_log","ONNV_VLP_log", "MAYV_E2_log")
-
+pathogens_onnv_only_model = c("ONNV_VLP_log","MAYV_E2_log")
 
 # run with all three 
 preprocessed_data_full_model <- prepare_multiplex_sero_data(
@@ -104,7 +104,7 @@ preprocessed_data_onnv_model <- prepare_multiplex_sero_data(
 
 preprocessed_data_onnv_samples_model <- prepare_multiplex_sero_data(
   data = onnv_samples_model_alpha,
-  pathogens = pathogens_full_model,
+  pathogens = pathogens_onnv_only_model,
   present_pathogens = c("ONNV_VLP_log")
 )
 
@@ -276,11 +276,12 @@ onnv_samples_fit <- readRDS(here('Results/fit_onnv_samples_model.rds'))
 # --- 1) Compare estimtes of Full ONNV only model (with all samples) with ONNV+CHIK model (with 920 samples removed that were NA for CHIK)
 chains_onnv_samples <- onnv_samples_fit$draws(format='df')
 chains_df_onnv_samples <- as.data.frame(chains_onnv_samples)
-preprocessed_data_onnv_samples_model <- readRDS("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/preprocessed_data_onnv_samples_only_model.rds")
+preprocessed_data_onnv_samples_model <- readRDS(here("Results/preprocessed_data_onnv_samples_model.rds"))
 
 # Model 2 
 sero_onnv_samples <- extract_sero(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, 
 pathogens=preprocessed_data_onnv_samples_model$pathogens)
+print(sero_onnv_samples)
 mu_onnv_samples <- extract_mu(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, pathogens=preprocessed_data_onnv_samples_model$pathogens)
 phi_onnv_samples <- extract_phi(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, pathogens=preprocessed_data_onnv_samples_model$pathogens)
 sds_onnv_samples <- extract_sd(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, pathogens=preprocessed_data_onnv_samples_model$pathogens)
@@ -319,7 +320,7 @@ cluster_df_onnv_samples <- meta_data_onnv_samples_model |>
     cluster_prob = cluster_prob_onnv_samples
   )
 
-meta_data_onnv_samples <- meta_data
+meta_data_onnv_samples <- meta_data_without_coords_supp_materials
 meta_data_onnv_samples <- meta_data_onnv_samples |>
   dplyr::left_join(cluster_df_onnv_samples, by = "id")
 

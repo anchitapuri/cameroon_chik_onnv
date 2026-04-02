@@ -64,6 +64,8 @@ if (grepl("\\+", age_groups$age_string[nrow(age_groups)])) {
 meta_data_with_coords <- readRDS(here('Results/meta_data_clean_with_coords.rds'))
 colnames(meta_data_with_coords)
 nrow(meta_data_with_coords)
+meta_data_with_coords_supp_materials <- readRDS(here('Results/meta_data_with_coords_supp_materials.rds'))
+nrow(meta_data_with_coords_supp_materials)
 
 # ----- Read labels data
 meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
@@ -88,19 +90,30 @@ data_points <- meta_data_with_coords %>%
   filter(!is.na(Latitude) & !is.na(Longitude)) %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
 
+data_points_supp_materials <- meta_data_with_coords_supp_materials %>%
+  st_drop_geometry() %>%
+  filter(!is.na(Latitude) & !is.na(Longitude)) %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
+
 data_utm <- st_transform(data_points, crs = 32633)
+data_utm_supp_materials <- st_transform(data_points_supp_materials, crs = 32633)
 coords_utm <- st_coordinates(data_utm) / 1000  # Convert to km
+coords_utm_supp_materials <- st_coordinates(data_utm_supp_materials) / 1000  # Convert to km
 colnames(coords_utm) <- c("Easting", "Northing")
+colnames(coords_utm_supp_materials) <- c("Easting", "Northing")
 
 # Add Easting and Northing to dataframe
 meta_data_with_coords$Easting <- coords_utm[, "Easting"]
 meta_data_with_coords$Northing <- coords_utm[, "Northing"]
 
+meta_data_with_coords_supp_materials$Easting <- coords_utm_supp_materials[, "Easting"]
+meta_data_with_coords_supp_materials$Northing <- coords_utm_supp_materials[, "Northing"]
+
 meta_data_with_labels$Easting <- meta_data_with_coords$Easting
 meta_data_with_labels$Northing <- meta_data_with_coords$Northing
 
-meta_data_onnv_samples$Easting <- meta_data_with_coords$Easting
-meta_data_onnv_samples$Northing <- meta_data_with_coords$Northing
+meta_data_onnv_samples$Easting <- meta_data_with_coords_supp_materials$Easting
+meta_data_onnv_samples$Northing <- meta_data_with_coords_supp_materials$Northing
 
 range(meta_data_with_labels$AgeInYears, na.rm = TRUE)
 
