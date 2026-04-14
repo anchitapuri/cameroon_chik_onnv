@@ -41,7 +41,6 @@ sum(values(cam_pop), na.rm = TRUE)
 cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/CameroonAge2025.csv')
 cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
-cameroon_age_2025
 
 cameroon_age_2025$total
 w_age <- cameroon_age_2025$total / sum(cameroon_age_2025$total)
