@@ -229,7 +229,7 @@ predicted_seroprevalence <- function(foi_result, model, age_groups, age_weights,
     geom_sf(data = prev_sf, aes(color = prev), size = 1.5, alpha = 0.5) +
     scale_color_gradientn(
         colours = c("#1f363d",
-         "#40798c",
+        "#40798c",
         "#70a9a1",
         "#f46036",
         "#a4243b"
@@ -299,7 +299,6 @@ predicted_annual_infections <- function(foi_result, model, age_groups, age_weigh
   # Get coordinates of raster cells for plotting later
   coords_xy <- terra::xyFromCell(cam_pop_agg, 1:terra::ncell(cam_pop_agg))
   
-  # Initialize
   n_cells <- length(cam_pop_vals)
   n_age_groups <- nrow(age_groups)
   infections_by_age <- matrix(0, nrow = n_cells, ncol = n_age_groups)

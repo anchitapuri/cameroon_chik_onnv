@@ -47,19 +47,27 @@ print(age_prev_model_fits)
 
 age_gender_prev_model_fits <- plot_age_seroprevalence_model_fits_by_gender(
   result = onnv_results_pop_grid, 
-  data = onnv_results_pop_grid$data_filtered,
+  data = meta_data_with_labels,
   model_data = meta_data_with_labels,
   chains_df = chains_df_full,
   infM = preprocessed_data_full_model$data$infM,
   pathogen_col = "a" # a == ONNV 
 )
 
+
+
 age_gender_prev_chikv <- plot_age_seroprevalence_obs_only_by_gender(
-  data       = onnv_results_pop_grid$data_filtered,
+  data       = meta_data_with_labels,
   model_data = meta_data_with_labels,
   chains_df  = chains_df_full,
   infM       = preprocessed_data_full_model$data$infM,
   pathogen_col = "b"  # swap to whichever column index CHIKV corresponds to
+)
+
+
+binary_age_gender_prev_chikv <- plot_age_seroprevalence_by_year_gender_obs_binary(
+  data_original = meta_data_with_labels,
+  positive_col = "CHIK_pos"
 )
 
 
