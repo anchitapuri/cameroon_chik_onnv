@@ -9,30 +9,12 @@ cameroon_age_2025 <- cameroon_age_2025 %>%
 meta_data_with_coords <- readRDS(here('Results/meta_data_with_coords.rds'))
 nrow(meta_data_with_coords) #6324
 
-
-nrow(meta_data_with_coords) #6324
-sum(is.na(meta_data_with_coords$Sex)) #21
-sum(meta_data_with_coords$Sex == 9, na.rm = TRUE) #9 
-sum(is.na(meta_data_with_coords$AgeInYears)) # 6 
-table(meta_data_with_coords$Sex)
-
-
-# # Drop NAs and age = 0 and sex = 9 
-meta_data_clean <- subset(
-  meta_data_with_coords,
-  !is.na(CHIKV_sE2) &
-  !is.na(ONNV_VLP) &
-  !is.na(MAYV_E2) &
-  !is.na(AgeInYears) &
-  AgeInYears != 0 &
-  !is.na(Sex) &
-  Sex != 9
-)
-nrow(meta_data_clean) #5272
+meta_data_clean <- readRDS(here('Results/meta_data_clean_with_coords.rds'))
+nrow(meta_data_clean)
 
 
 preprocessed_data_full_model <- readRDS('Results/preprocessed_data_full_model.rds')
-nrow(preprocessed_data_full_model$data$y) #5398
+nrow(preprocessed_data_full_model$data$y) #5272
 
 
 
@@ -72,11 +54,11 @@ inset_map <- ggplot(cam_pop_df, aes(x = x, y = y, fill = pop_density)) +
   coord_equal() +
   theme_void() +
   theme(
-     legend.position  = c(0.5, 0.05),   
+     legend.position  = c(0.5, 0.01),   
      legend.text = element_text(size = 11),
-     legend.title = element_text(size = 11),
+     legend.title = element_text(size = 14),
      legend.direction = "horizontal",    
-     legend.margin = margin(20, 0, 0, 0),  # adds space above the legend
+     legend.margin = margin(25, 0, 0, 0),  # adds space above the legend
      #plot.background = element_rect(fill = "white", color = "black", linewidth = 0.5),
      plot.margin = margin(10, 5, 15, 5)
   )
@@ -171,6 +153,7 @@ summarise(
 # Mean age = 18
 mean(sf_meta_data_with_coords_pw_filtered$AgeInYears, na.rm = TRUE)
 
+sum(is.na(meta_data_clean$Sex))
 
 pyramid_data <- meta_data_clean %>%
   st_drop_geometry() %>%
@@ -290,7 +273,8 @@ print(fig1c)
 
 
 # Combined figure 
-fig1 <- (fig1a_with_inset | (fig1b / fig1c)) + plot_layout(widths = c(2, 1))
+fig1 <- (fig1a_with_inset | (fig1b / fig1c)) + plot_layout(widths = c(2.5, 1))
+print(fig1)
 
 ggsave(here('Results/Fig1.png'), 
        plot = fig1,    

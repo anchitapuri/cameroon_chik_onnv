@@ -91,7 +91,7 @@ chik_infections <-ggplot()  +
   ) +
   geom_sf(
     data = chik_centroids_jittered,
-    colour = '#065a82', 
+    colour = '#004E66', 
     size = 8,
     alpha = 0.85)  + 
   scale_size(
@@ -102,13 +102,13 @@ chik_infections <-ggplot()  +
   geom_sf(
     data = cities_sf,
     aes(fill = city),
-    shape = 24,
-    colour = "#1b3b6f",
-    size = 10,
+    shape = 23,
+    colour = "#00060f",
+    size = 15,
     stroke = 0.6
   ) +
   scale_fill_manual(
-    values = c("Yaoundé" = "#db2e6e", "Douala" = "#6a4c93"),
+    values = c("Yaoundé" = "#F0D3F7", "Douala" = "#B6C8A9"),
     name = ""
   ) +
   annotation_scale(
@@ -118,7 +118,7 @@ chik_infections <-ggplot()  +
     text_cex = 1.5
   ) +
   theme(
-    legend.position = c(0.37, 0.66), 
+    legend.position = c(0.32, 0.66), 
     panel.grid = element_blank(),
     axis.text = element_blank(),
     axis.ticks = element_blank(),
@@ -127,7 +127,7 @@ chik_infections <-ggplot()  +
     panel.background = element_rect(fill = "white"),
     plot.background = element_rect(fill = "white"),
   )
-
+print(chik_infections)
 
 ggsave(here('Results/fig4f.png'), 
        plot = chik_infections,    # swap for your actual plot object name

@@ -56,7 +56,7 @@ missing_districts_geometeries <- read_excel("/Users/ap2488/Desktop/Cameroon_Anal
 
 
 # drop NAs 
-nrow(meta_data) #633
+nrow(meta_data) #6336
 length(unique(tolower(meta_data$DistrictOfresidence))) #208
 
 
@@ -496,7 +496,7 @@ sf_meta_data_with_coords_pw[duplicated(sf_meta_data_with_coords_pw$id) | duplica
 
 sf_meta_data_with_coords_pw_filtered <- sf_meta_data_with_coords_pw |>
   distinct(id, .keep_all = TRUE)
-nrow(sf_meta_data_with_coords_pw_filtered)
+nrow(sf_meta_data_with_coords_pw_filtered) #6324
 
 # Verify
 nrow(sf_meta_data_with_coords_pw_filtered)  # should be 6324

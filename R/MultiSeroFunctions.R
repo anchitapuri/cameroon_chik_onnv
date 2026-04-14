@@ -393,9 +393,9 @@ plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
     facet_wrap(~pathogen,
         labeller = labeller(
           pathogen = c(
-            "ONNV_VLP_log" = "ONNV",
-            "CHIKV_sE2_log" = "CHIKV",
-            "MAYV_E2_log"  = "MAYV"
+            "ONNV_VLP_log" = "ONNV VLP",
+            "CHIKV_sE2_log" = "CHIKV E2",
+            "MAYV_E2_log"  = "MAYV E2"
           )
         )
       ) +
@@ -403,16 +403,16 @@ plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
     # Manual colours
     scale_colour_manual(
       values = c(
-        "True negative" = "#021d37",
-        "Cross-reactive negative" = "#035a6f",
-        "Positive" = "#530227"
+        "True negative" = "#823e29",
+        "Cross-reactive negative" = "#134611",
+        "Positive" = "#EF81A5"
       )
     ) +
     scale_fill_manual(
       values = c(
-        "True negative" = "#043565",
-        "Cross-reactive negative" = "#028eb1",
-        "Positive" = "#c7035b"
+        "True negative" = "#823e29",
+        "Cross-reactive negative" = "#134611",
+        "Positive" = "#EF81A5"
       )
     )+ guides(fill = "none",  colour = "none")
   
@@ -478,11 +478,11 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
       chik_mu1_ciU,
       onnv_to_chik_increase_ciU
     ),
-    infecting_virus = c("ONNV", "CHIK", "CHIK", "ONNV")
+    infecting_virus = c("ONNV VLP", "CHIKV E2", "CHIKV E2", "ONNV VLP")
   ) %>%
     mutate(
       response_type = factor(response_type, levels = c("Homologous", "Cross-reactive \n(φ × μ1)")),
-      antigen_label = ifelse(antigen == "ONNV_VLP_log", "ONNV Antigen", "CHIK Antigen")
+      antigen_label = ifelse(antigen == "ONNV_VLP_log", "ONNV VLP Antigen", "CHIKV E2 Antigen")
     )
   
   p <- ggplot(plot_data, aes(x = response_type, y = increase, fill = infecting_virus)) +
@@ -492,7 +492,7 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
                   width = 0.25, linewidth = 0.8) +
     facet_wrap(~ antigen_label) +
     scale_fill_manual(
-      values = c("ONNV" = "#c7035b", "CHIK" = "#028eb1"),
+      values = c("ONNV VLP" = "#648767", "CHIKV E2" = "#715F95"),
       name = "Infecting pathogen"
     )  +
     labs(
@@ -582,20 +582,20 @@ plot_seroprevalence <- function(chains_df) {
   
   # Create summary data
   sero_data <- tibble(
-    pathogen = c("ONNV", "CHIK"),
+    pathogen = c("ONNV VLP", "CHIKV E2"),
     med = c(median(sero_onnv), median(sero_chik)),
     ciL = c(quantile(sero_onnv, 0.025), quantile(sero_chik, 0.025)),
     ciU = c(quantile(sero_onnv, 0.975), quantile(sero_chik, 0.975))
   ) %>%
     mutate(
-      pathogen = factor(pathogen, levels = c("ONNV", "CHIK"))
+      pathogen = factor(pathogen, levels = c("ONNV VLP", "CHIKV E2"))
     )
   
   p <- ggplot(sero_data, aes(x = pathogen, y = med, fill = pathogen)) +
     geom_col(width = 0.6, alpha = 0.8) +
     geom_errorbar(aes(ymin = ciL, ymax = ciU), width = 0.25, linewidth = 0.8) +
     scale_fill_manual(
-      values = c("ONNV" = "#c7035b", "CHIK" = "#028eb1"),
+      values = c("ONNV VLP" = "#648767", "CHIKV E2" = "#715F95"),
       guide = "none"
     ) +
     scale_y_continuous(limits = c(0, NA), labels = scales::percent) +
@@ -628,19 +628,19 @@ plot_seroprevalence <- function(chains_df) {
 
 plot_titres_coloured_by_clusters <- function(meta_data) {
 
-  cluster_labels <- c("1" = "ONNV -ve, CHIK -ve", "2" = "ONNV +ve", "3" = "CHIK +ve")
-  cluster_colours <- c("1" = "#002855", "2" = "#c7035b", "3" = "#028eb1")
+  cluster_labels <- c("1" = "ONNV VLP -ve, CHIKV E2 -ve", "2" = "ONNV VLP +ve", "3" = "CHIKV E2 +ve")
+  cluster_colours <- c("1" = "#C56244", "2" = "#648767", "3" = "#715F95")
 
     p <- meta_data %>%
         filter(!is.na(cluster)) %>%
         ggplot(aes(x = log(ONNV_VLP),
                   y = log(CHIKV_sE2),
                   color = factor(cluster))) +
-    geom_point(alpha = 0.9, size = 1) +
+    geom_point(alpha = 0.9, size = 1.5) +
     scale_color_manual(values = cluster_colours, labels = cluster_labels) +
     labs(
-      x = "Log(ONNV MFI)",
-      y = "Log(CHIKV MFI)") +
+      x = "Log(ONNV VLP MFI)",
+      y = "Log(CHIKV E2 MFI)") +
     theme_bw() +
     theme(
       plot.title = element_text(hjust = 0.5, size = 20),

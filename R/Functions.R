@@ -547,7 +547,7 @@ plot_age_seroprevalence <- function(data, chains_df, infM, pathogen_col, pathoge
 }
 
 # ---- Plot proportion positive by age stratified by gender
-plot_age_seroprevalence_by_year_gender_obs <- function(data_original, positive_col) {
+plot_age_seroprevalence_by_year_gender_obs_binary <- function(data_original, positive_col) {
   
   # Recreate the filtered dataset used in the model
   data_plot <- data_original
@@ -587,7 +587,7 @@ plot_age_seroprevalence_by_year_gender_obs <- function(data_original, positive_c
   obs$obs_upper <- pmin(1, obs$proportion_positive + 1.96*sqrt(obs$proportion_positive*(1-obs$proportion_positive)/obs$n))
   
   y_limits <- if (positive_col == "CHIK_pos") {
-    c(0, 0.08)
+    c(0, 0.3)
   } else {
     c(0, 0.8)
   }
@@ -935,6 +935,143 @@ plot_age_seroprevalence_model_fits_by_gender <- function(result, data, model_dat
   print(p)
   invisible(list(plot = p, obs = obs, pred = pred, prevalence_draws = prevalence_draws))
 }
+
+# --- Obs eroprevalence by age group by year and gender (multisero model)---
+plot_age_seroprevalence_obs_only_by_gender <- function(data, model_data, chains_df, infM, pathogen_col) {
+  
+  data_plot <- data
+  model_data <- model_data[!is.na(model_data$cluster), ]
+  
+  # Derived variables
+  data_plot$year_of_survey <- as.numeric(substr(data_plot$Sample, 1, 4))
+  
+  # Age groups
+  age_breaks <- c(0, 5, 10, 16, 23, 31, 40, 50, 100)
+  age_labels <- c("0-4", "5-9", "10-15", "16-22", "23-30", "31-39", "40-49", "50+")
+  
+  data_plot$age_group <- cut(
+    data_plot$AgeInYears,
+    breaks = age_breaks,
+    labels = age_labels,
+    include.lowest = TRUE,
+    right = FALSE
+  )
+  
+  # Keep only Male / Female
+  data_plot <- data_plot[data_plot$Sex %in% c(1, 2), ]
+  
+  data_plot$sex_label <- factor(
+    data_plot$Sex,
+    levels = c(1, 2),
+    labels = c("Male", "Female")
+  )
+  
+  # Keep ids after filtering
+  kept_ids <- data_plot$id
+  
+  # ---- Observed summaries from posterior probabilities ----
+  positive_components <- which(infM[, pathogen_col] == 1)
+  
+  matched_idx <- match(kept_ids, model_data$id)
+  cat("Any NA in posterior match:", any(is.na(matched_idx)), "\n")
+  
+  prob_cols_list <- lapply(positive_components, function(comp) {
+    sprintf("post_prob[%d,%d]", matched_idx, comp)
+  })
+  
+  all_prob_cols <- unlist(prob_cols_list)
+  missing_cols <- setdiff(all_prob_cols, colnames(chains_df))
+  
+  cat("Number of missing columns:", length(missing_cols), "\n")
+  if (length(missing_cols) > 0) {
+    print(head(missing_cols, 20))
+    stop("Some post_prob columns were not found in chains_df")
+  }
+  
+  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
+    as.matrix(chains_df[, cols, drop = FALSE])
+  }))
+  
+  n_draws <- nrow(probs_all_draws)
+  
+  prevalence_draws <- purrr::map_dfr(1:n_draws, function(draw_num) {
+    probs_this_draw <- probs_all_draws[draw_num, ]
+    
+    data_plot %>%
+      dplyr::mutate(prob_pos = probs_this_draw) %>%
+      dplyr::group_by(year_of_survey, age_group, sex_label) %>%
+      dplyr::summarise(
+        prevalence = mean(prob_pos, na.rm = TRUE),
+        n = dplyr::n(),
+        .groups = "drop"
+      ) %>%
+      dplyr::mutate(draw = draw_num)
+  })
+  
+  # Observed summaries
+  obs <- prevalence_draws %>%
+    dplyr::group_by(year_of_survey, age_group, sex_label) %>%
+    dplyr::summarise(
+      obs_mean = median(prevalence),
+      obs_lower = quantile(prevalence, 0.025),
+      obs_upper = quantile(prevalence, 0.975),
+      n = dplyr::first(n),
+      .groups = "drop"
+    )
+  
+  # Shared dodge
+  pd <- position_dodge(width = 0.7)
+  
+  # Plot
+  p <- ggplot() +
+    # Observed bars
+    geom_col(
+      data = obs,
+      aes(x = age_group, y = obs_mean, fill = sex_label),
+      position = pd,
+      width = 0.8,
+      alpha = 0.6,
+      linewidth = 0.2
+    ) +
+    # Observed CIs
+    geom_errorbar(
+      data = obs,
+      aes(x = age_group, ymin = obs_lower, ymax = obs_upper, group = sex_label),
+      position = pd,
+      width = 0.1,
+      linewidth = 0.5,
+      colour = "black"
+    ) +
+    facet_wrap(~ year_of_survey, ncol = 5) +
+    scale_fill_manual(values = c("Male" = "#b84f74", "Female" = "#00798c")) +
+    labs(
+      x = "Age group",
+      y = "Proportion seropositive",
+      fill = "Observed"
+    ) +
+    theme_bw() +
+    theme(
+      panel.grid = element_blank(),
+      panel.background = element_rect(fill = "white"),
+      axis.line = element_line(color = "black", linewidth = 0.7),
+      axis.ticks.x = element_line(color = "black", linewidth = 0.5),
+      axis.ticks.y = element_line(color = "black", linewidth = 0.5),
+      axis.text = element_text(size = 20),
+      axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
+      axis.title = element_text(size = 24),
+      legend.text = element_text(size = 18),
+      legend.title = element_text(size = 18),
+      strip.text = element_text(size = 20),
+      panel.border = element_blank(),
+      aspect.ratio = 1.2,
+      legend.position = "bottom",
+      strip.background = element_rect(fill = "#ffffff")
+    )
+  
+  print(p)
+  invisible(list(plot = p, obs = obs, prevalence_draws = prevalence_draws))
+}
+
 
 # prediction FOI, seroprevelance and infections by region 
 aggregate_predictions_by_region <- function(

@@ -54,9 +54,26 @@ age_gender_prev_model_fits <- plot_age_seroprevalence_model_fits_by_gender(
   pathogen_col = "a" # a == ONNV 
 )
 
+age_gender_prev_chikv <- plot_age_seroprevalence_obs_only_by_gender(
+  data       = onnv_results_pop_grid$data_filtered,
+  model_data = meta_data_with_labels,
+  chains_df  = chains_df_full,
+  infM       = preprocessed_data_full_model$data$infM,
+  pathogen_col = "b"  # swap to whichever column index CHIKV corresponds to
+)
+
 
 ggsave(here("Results/Fig3.png"), 
        plot = age_gender_prev_model_fits[[1]],    # swap for your actual plot object name
+       width = 18, 
+       height = 12, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
+
+
+ggsave(here("Results/Supplementary_CHIKV_prev_age_gender.png"), 
+       plot = age_gender_prev_chikv[[1]],    # swap for your actual plot object name
        width = 18, 
        height = 12, 
        units = "in", 
