@@ -636,7 +636,7 @@ plot_titres_coloured_by_clusters <- function(meta_data) {
         ggplot(aes(x = log(ONNV_VLP),
                   y = log(CHIKV_sE2),
                   color = factor(cluster))) +
-    geom_point(alpha = 0.9, size = 1.5) +
+    geom_point(alpha = 0.3, size = 2) +
     scale_color_manual(values = cluster_colours, labels = cluster_labels) +
     labs(
       x = "Log(ONNV VLP MFI)",
