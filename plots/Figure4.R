@@ -119,8 +119,8 @@ chik_infections <- ggplot()  +
   ) +
   theme(
     legend.position = c(0.32, 0.66), 
-    legend.key.height = unit(1.5, "cm"),  # space allocated per item
-    legend.spacing.y  = unit(0.5, "cm"),   # extra gap between items
+    legend.key.height = unit(1.5, "cm"),  
+    legend.spacing.y  = unit(0.5, "cm"),    
     panel.grid = element_blank(),
     axis.text = element_blank(),
     axis.ticks = element_blank(),
@@ -132,7 +132,7 @@ chik_infections <- ggplot()  +
 print(chik_infections)
 
 ggsave(here('Results/fig4f.png'), 
-       plot = chik_infections,    # swap for your actual plot object name
+       plot = chik_infections,
        width = 10, 
        height = 12, 
        units = "in", 
