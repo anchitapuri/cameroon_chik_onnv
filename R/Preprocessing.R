@@ -33,6 +33,7 @@ cam_shapefile_districts <- read_sf('/Users/ap2488/Desktop/Cameroon_Analysis_2025
 cam_shapefile_districts2 <- read_sf('/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_admin_boundaries/cmr_admin3.shp')
 
 
+
 # Load population rasters
 cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
 cam_pop_den <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_pd_2020_1km_UNadj.tif")
@@ -43,7 +44,7 @@ albopictus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Aedes_maps_publ
 anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_funestus_CMR.tiff')
 anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_gambiae_ss_CMR.tiff')
 
-plot(aegypti)
+
 
 # Load population by gender / age data 
 cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/CameroonAge2025.csv')
@@ -76,6 +77,7 @@ sum(is.na(meta_data$DistrictOfresidence)) #3
 cam_shapefile_districts$NAME2 <- gsub("DS_", "", cam_shapefile_districts$NAME2)
 cam_shapefile_districts <- cam_shapefile_districts %>%
   mutate(shapefile_district_lower = tolower(NAME2))
+
 
 
 # Check how many names and districts 
@@ -113,6 +115,8 @@ View(cam_shapefile_districts_merged)
 meta_data <- meta_data %>%
   mutate(district_lower = tolower(DistrictOfresidence))
 length(unique(meta_data$district_lower)) #208 unique districts 
+
+
 
 
 # --- Non-matching districts between shapefile 1 and data 
@@ -162,7 +166,7 @@ meta_data_districts_added <- meta_data %>%
   ))
 length(unique(meta_data_districts_added$district_lower)) #198 districts - some names merged 
 
-# Use hapefile 2 since there are still districts in data missing from shapefile 1
+# Use shapefile 2 since there are still districts in data missing from shapefile 1
 # Merge geometries in the second shapefile (in case it has duplicates too)
 cam_shapefile_districts2 <- cam_shapefile_districts2 %>%
   mutate(shapefile_district_lower2 = tolower(adm3_name1))
@@ -201,7 +205,7 @@ cam_shapefile_districts_unique <- cam_shapefile_districts_merged %>%
   group_by(shapefile_district_lower) %>%
   slice(1) %>%  # Just take the first geometry for each district
   ungroup()
-
+length(unique(meta_data_districts_added$district_lower))
 
 # --- Check the remianing istricts in meta_data but NOT in shapefile
 # Rows lost currently == 192
@@ -223,6 +227,7 @@ meta_data_districts_added <- meta_data_districts_added |>
          !district_lower %in% c("abeche", "biltine"))
 nrow(meta_data_districts_added) #6331
 
+length(unique(meta_data_districts_added$district_lower)) # 195
 
 # districts still unmatched 
 remaining_unmatched_districts <- c(
@@ -238,7 +243,7 @@ remaining_unmatched_districts <- c(
 )
 subset_missing_districts_geometeries <- missing_districts_geometeries %>%
   filter(tolower(District) %in% remaining_unmatched_districts)
-
+nrow(subset_missing_districts_geometeries)
 
 # visualise where the missing geometeries fall 
 missing_districts_geometeries_sf <- subset_missing_districts_geometeries %>%
@@ -251,7 +256,7 @@ missing_districts_geometeries_sf <- subset_missing_districts_geometeries %>%
 
 # Make sure shapefile CRS matches (reproject if needed)
 cam_shapefile_districts_merged <- st_transform(cam_shapefile_districts_merged, crs = 4326)
-quartz()
+
 # Plot
 ggplot() +
   geom_sf(data = cam_shapefile_districts_merged, fill = "lightgrey", color = "white", linewidth = 0.3) +

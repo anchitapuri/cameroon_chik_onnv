@@ -23,6 +23,10 @@ library(patchwork)
 library(mixR)
 library(forcats)
 library(writexl)
+library(posterior)
+library(brms)
+library(tidybayes)
+
 
 source(here('R/MultiSeroFunctions.R'))
 source(here('R/Functions.R'))
