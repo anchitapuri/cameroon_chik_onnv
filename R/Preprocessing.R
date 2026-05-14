@@ -316,7 +316,6 @@ ggplot(sf_meta_data_with_coords) +
 
 
 # --- 2) Population-Weighted Centroids 
-
 # Create district polygons with area
 districts <- sf_meta_data_with_coords %>%
   st_transform(32633) %>%  # UTM Zone 33N
@@ -571,9 +570,8 @@ saveRDS(meta_data_clean_without_coords, here('Results/meta_data_clean_without_co
 
 
 
-
 # save locally as well to run Stan 
-saveRDS(meta_data_clean_without_coords, ('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/meta_data_clean_without_coords.rds'))
+#saveRDS(meta_data_clean_without_coords, ('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/meta_data_clean_without_coords.rds'))
 
  # save another version with CHIK,ONNV and MAYV NAs 
  # this is for supplementary materials - to show that results are similar when including all samples vs only those with complete data

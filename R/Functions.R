@@ -93,7 +93,6 @@ run_inla <- function(year_intro, data, cam_pop, positive_col) {
 }
 
 
-
 # --- Function to extract and plot FOI ---
 predicted_foi <- function(model, coop, pathogen_name = "ONNV") { 
   # Get prediction indices
@@ -1200,7 +1199,6 @@ make_plot_onnv <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") 
 
   obs_clean <- df_obs[!is.nan(df_obs$x), ]
 
-  # truncate CIs to [0, 0.5]
   obs_clean$ymin <- pmax(obs_clean$ymin, 0)
   obs_clean$ymax <- pmin(obs_clean$ymax, 0.5)
 
@@ -1358,7 +1356,7 @@ calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df,
       ymax = quantile(prevalence, 0.975),
       .groups = "drop"
     ) %>%
-    dplyr::select(x = var_mid, y, ymin, ymax)           # match original output columns
+    dplyr::select(x = var_mid, y, ymin, ymax)         
  
 
     # posterior mean per individual

@@ -1,4 +1,3 @@
-
 # ---- Generate infection status matrix
 inf_matrix <- function(N_pathogen, pres=rep(1,N_pathogen)){
   

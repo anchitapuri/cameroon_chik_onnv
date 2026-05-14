@@ -10,13 +10,13 @@ library(here)
 library(mixR)
 library(raster)
 library(INLA)
-library(PBSmapping)  # For convUL function
+library(PBSmapping)  
 library(sp)
 library(gstat)
 library(sf)
 library(rnaturalearth)
 library(viridis)
-library(patchwork)  # for combining plots
+library(patchwork) 
 library(spatstat)
 library(dplyr)
 library(tidyr)
@@ -27,6 +27,8 @@ library(centr)
 library(terra)
 library(colorspace)
 library(ggspatial)
+
+
 
 # --- Source functions
 source(here('R/Functions.R'))
@@ -64,6 +66,7 @@ if (grepl("\\+", age_groups$age_string[nrow(age_groups)])) {
 meta_data_with_coords <- readRDS(here('Results/meta_data_clean_with_coords.rds'))
 colnames(meta_data_with_coords)
 nrow(meta_data_with_coords)
+
 meta_data_with_coords_supp_materials <- readRDS(here('Results/meta_data_with_coords_supp_materials.rds'))
 nrow(meta_data_with_coords_supp_materials)
 
@@ -84,7 +87,7 @@ meta_data_with_coords_supp_materials <- subset(
 nrow(meta_data_with_coords_supp_materials)
 
 
-# ----- Read labels data
+# ----- Read labelled data
 meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
 colnames(meta_data_with_labels)
 nrow(meta_data_with_labels)
@@ -94,7 +97,6 @@ unique(meta_data_with_labels$year_of_survey)
 
 meta_data_onnv_samples <- read.csv(here('Results/meta_data_onnv_samples_with_labels.csv'))
 nrow(meta_data_onnv_samples)
-
 
 # Convert coords to Easting and Northing
 sp_vill <- SpatialPoints(cbind(meta_data_with_labels$Longitude, meta_data_with_labels$Latitude))
@@ -128,16 +130,15 @@ meta_data_with_coords_supp_materials$Northing <- coords_utm_supp_materials[, "No
 meta_data_with_labels$Easting <- meta_data_with_coords$Easting
 meta_data_with_labels$Northing <- meta_data_with_coords$Northing
 
-
 meta_data_onnv_samples$Easting <- meta_data_with_coords_supp_materials$Easting
 meta_data_onnv_samples$Northing <- meta_data_with_coords_supp_materials$Northing
 
-range(meta_data_with_labels$AgeInYears, na.rm = TRUE)
 
-
+# Rename
 model_data <- meta_data_with_labels
 model_data_onnv_samples <- meta_data_onnv_samples
 
+# Check for missing data / NA
 sum(is.na(model_data$AgeInYears))
 sum(model_data$AgeInYears == 0, na.rm = TRUE)
 sum(is.na(model_data$Easting) & !is.na(model_data$Northing))
@@ -158,6 +159,7 @@ onnv_results_pop_grid_onnv_samples <- run_inla(
   cam_pop = cam_pop,
   positive_col = "ONNV_pos")
 
+
 # --- Save prediction results 
 saveRDS(onnv_results_pop_grid, here('Results/ONNV_INLAResults.rds'))
 saveRDS(onnv_results_pop_grid_onnv_samples, here('Results/ONNV_INLAResults_ONNV_samples.rds'))
@@ -167,7 +169,6 @@ onnv_results_pop_grid <- readRDS(here('Results/ONNV_INLAResults.rds'))
 
 
 # --- SPATIAL PREDICTIONS: # Overall cameroon estimates ---- 
-
 # overall FOI
 foi_summary <- onnv_results_pop_grid$output$summary.fixed
 est_cameroonwide_foi <- list(
@@ -175,17 +176,15 @@ est_cameroonwide_foi <- list(
   ciL  = exp(foi_summary$`0.025quant`),
   ciU  = exp(foi_summary$`0.975quant`)
 )
-est_cameroonwide_foi
 
-
-
+# onnv only samples model
 foi_summary_onnv_samples <- onnv_results_pop_grid_onnv_samples$output$summary.fixed
 est_cameroonwide_foi_onnv_samples <- list(
   mean = exp(foi_summary_onnv_samples$mean),
   ciL  = exp(foi_summary_onnv_samples$`0.025quant`),
   ciU  = exp(foi_summary_onnv_samples$`0.975quant`)
 )
-est_cameroonwide_foi_onnv_samples
+
 
 # -- cameroon wide summary 
 compute_foi_metrics <- function(foi_val, age_groups, w_age, cam_pop, total_cameroon_pop) {
@@ -245,6 +244,7 @@ seropos_mean <- total_cameroon_pop * metrics_mean$avg_seroprev
 seropos_ciL  <- total_cameroon_pop * metrics_ciL$avg_seroprev
 seropos_ciU  <- total_cameroon_pop * metrics_ciU$avg_seroprev
 
+# print summary statement
 cat(sprintf(
   "We estimated that an average of %s (95%% CI: %s-%s) 
   individuals get infected each year and that in 2020, 
@@ -260,7 +260,6 @@ cat(sprintf(
   metrics_ciL$avg_seroprev  * 100,
   metrics_ciU$avg_seroprev  * 100
 ))
-
 
 
 # --- Cameroon Wide prediction, aggregated by region 
@@ -280,7 +279,6 @@ infections_onnv <- predicted_annual_infections(
   crs = 32633,
   pathogen_name = "ONNV"
 )
-
 
 
 cameroon_regions <- ne_states(country = "Cameroon", returnclass = "sf")
@@ -328,16 +326,16 @@ region_level_predictions <- list(
 saveRDS(region_level_predictions, here('Results/region_level_predictions.rds'))
 print(region_level_predictions)
 
-# Discussion - prob of disease,  acute cases, arthralgic cases and  deaths per year occur in Cameroon each year
+# prob of disease,  acute cases, arthralgic cases and  deaths per year occur in Cameroon each year
 average_annual_infections <- metrics_mean$infections
 ciL_annual_infections <- metrics_ciL$infections
 ciU_annual_infections <- metrics_ciU$infections
 
 prob_disease <- 0.5 # assuming same as CHIKV
-prob_mild <- 0.88 # Given disease, probability of it being mild (from Gabrial paper)
-prob_severe <- 0.12  # Given disease, probability of it being severe (from Gabrial paper)
+prob_mild <- 0.88 
+prob_severe <- 0.12 
 prob_medically_attended <- 0.0113
-prob_chronic_given_severe <- 0.44 #  Kang et al 
+prob_chronic_given_severe <- 0.44 
 
 # acute cases 
 acute_cases <- average_annual_infections * prob_disease 
@@ -367,11 +365,9 @@ cat("Estimated number of deaths per year:", death)
 
 
 # supplementary data - region level prediction 
-
 # supplementary data 
 region_level_predictions <- readRDS(here("Results/region_level_predictions.rds"))
 region_level_predictions
-
 
 # comparison of malaria risk with ONNV risk 
 # Number of newly diagnosed Plasmodium falciparum cases per 1,000 population (using 2024)
