@@ -2,6 +2,7 @@
 
 A statistical framework using multi-pathogen serology data to simultaneously reconstruct cross-reactivity patterns and infer individual- and population-level infection histories. In addition, this repository includes spatial modelling of CHIKV and ONNV transmission across Cameroon.
 
+All analysis was conducted in R (R version 4.4.1). Bayesian analysis was conducted using the R Interface to CmdStan (cmdstan-2.38.0). Spatial analysis was conducted using R-INLA (INLA_24.06.27).
 
 # Pre processing data 
 District level geometery from: 
