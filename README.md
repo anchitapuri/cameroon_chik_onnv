@@ -1,5 +1,6 @@
-# cameroon_chik_onnv
-Spatial Modelling of CHIK and ONNV in Cameroon
+# Analysis for ONNV and CHIKV in Cameroon 
+
+A statistical framework using multi-pathogen serology data to simultaneously reconstruct cross-reactivity patterns and infer individual- and population-level infection histories. In addition, this repository includes spatial modelling of CHIKV and ONNV transmission across Cameroon.
 
 
 # Pre processing data 
