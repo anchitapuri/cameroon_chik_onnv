@@ -1,3 +1,6 @@
 Results/*.rds
 oldfiles/
 .DS_Store
+
+
+Data/

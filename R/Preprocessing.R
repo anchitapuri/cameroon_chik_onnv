@@ -25,35 +25,35 @@ library(patchwork)
 
 # --- Read data files 
 # original data
-meta_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/base_complete_MFI_meta.csv')
+meta_data <- read.csv(here(data, 'base_complete_MFI_meta.csv'))
 nrow(meta_data)
 # shapefile #1
-cam_shapefile_districts <- read_sf('/Users/ap2488/Desktop/Cameroon_Analysis_2025/S4_Cameroon_health_districts_files/Caedistricts179_region.shp')
+cam_shapefile_districts <- read_sf(here(data, 'Caedistricts179_region.shp'))
 # Second shapefile used (to find remaining mismatched districts)
-cam_shapefile_districts2 <- read_sf('/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_admin_boundaries/cmr_admin3.shp')
+cam_shapefile_districts2 <- read_sf(here(data, 'cmr_admin3.shp'))
 
 
 
 # Load population rasters
-cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
-cam_pop_den <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_pd_2020_1km_UNadj.tif")
+cam_pop <- rast(here(data, 'cmr_ppp_2020_UNadj.tif'))
+cam_pop_den <- rast(here(data, 'cmr_pd_2020_1km_UNadj.tif'))
 
 # Load mosquito maps
-aegypti <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Aedes_maps_public/aegypti.tif')
-albopictus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/Aedes_maps_public/albopictus.tif')
-anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_funestus_CMR.tiff')
-anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_gambiae_ss_CMR.tiff')
+aegypti <- rast(here(data, 'Aedes_maps_public', 'aegypti.tif'))
+albopictus <- rast(here(data, 'Aedes_maps_public', 'albopictus.tif'))
+anopheles_funestus <- rast(here(data, 'Anopheles_maps', '2010_Anopheles_funestus_CMR.tiff'))
+anopheles_gambiae <- rast(here(data, 'Anopheles_maps', '2010_Anopheles_gambiae_ss_CMR.tiff'))
 
 
 
 # Load population by gender / age data 
-cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/CameroonAge2025.csv')
+cameroon_age_2025 <- read.csv(here(data, 'CameroonAge2025.csv'))
 cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
 
 
 # excel sheet with additional district geometeries - these were missing from both the shapefiles
-missing_districts_geometeries <- read_excel("/Users/ap2488/Desktop/Cameroon_Analysis_2025/Districts_sante_2021.xls", sheet = "Sheet2")
+missing_districts_geometeries <- read_excel(here(data, 'Districts_sante_2021.xls'), sheet = "Sheet2")
 
 
 # drop NAs 
@@ -568,11 +568,6 @@ nrow(meta_data_clean_without_coords) #5272
 saveRDS(meta_data_clean_with_coords, here('Results/meta_data_clean_with_coords.rds'))
 saveRDS(meta_data_clean_without_coords, here('Results/meta_data_clean_without_coords.rds'))
 
-
-
-# save locally as well to run Stan 
-#saveRDS(meta_data_clean_without_coords, ('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/meta_data_clean_without_coords.rds'))
-
  # save another version with CHIK,ONNV and MAYV NAs 
  # this is for supplementary materials - to show that results are similar when including all samples vs only those with complete data
 meta_data_without_coords_supp_materials <- subset(
@@ -582,7 +577,6 @@ meta_data_without_coords_supp_materials <- subset(
   !is.na(Sex) &
   Sex != 9
 )
-nrow(meta_data_without_coords_supp_materials) #6172
 
-saveRDS(meta_data_without_coords_supp_materials, ('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/MultiSeroModel/meta_data_without_coords_supp_materials.rds'))
+
 saveRDS(meta_data_without_coords_supp_materials, here('Results/meta_data_without_coords_supp_materials.rds'))
