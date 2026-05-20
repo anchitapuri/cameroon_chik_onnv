@@ -464,7 +464,7 @@ plot_age_seroprevalence <- function(data, chains_df, infM, pathogen_col, pathoge
     mutate(original_row = row_number()) %>%  # Track original indices
     filter(!is.na(AgeInYears))  # Remove rows with NA ages
   
-  # Get the indices of rows we're keeping
+
   kept_indices <- data_plot$original_row
   N_kept <- length(kept_indices)
   
@@ -554,7 +554,6 @@ plot_age_seroprevalence_by_year_gender_obs_binary <- function(data_original, pos
   # Filter to only Sex = 1 (Male) or 2 (Female)
   data_plot <- data_plot[data_plot$Sex %in% c(1, 2), ]
   
-  # Create sex labels (assuming 1 = Male, 2 = Female)
   data_plot$sex_label <- factor(data_plot$Sex, 
                                 levels = c(1, 2), 
                                 labels = c("Male", "Female"))
@@ -570,7 +569,6 @@ plot_age_seroprevalence_by_year_gender_obs_binary <- function(data_original, pos
     right = FALSE
   )
   
-  # Create formulas dynamically - now including sex_label
   formula_mean <- as.formula(paste(positive_col, "~ year_of_survey + age_group + sex_label"))
   formula_length <- as.formula(paste(positive_col, "~ year_of_survey + age_group + sex_label"))
   
@@ -618,14 +616,10 @@ plot_age_seroprevalence_by_year_gender_obs_binary <- function(data_original, pos
 # --- Seroprevalence by age group by year - model fits ---
 plot_age_seroprevalence_model_fits <- function(result, data, model_data, chains_df, infM, pathogen_col) {
   
-  # Recreate the filtered dataset used in the model
   data_plot <- data
-  # drop NA from cluster --> this ensure meta_data_with_labels == chains_df
   meta_data_with_labels <- meta_data_with_labels[!is.na(meta_data_with_labels$cluster), ]
-# Only add derived variables (do NOT refilter rows)
   data_plot$year_of_survey <- as.numeric(substr(data_plot$Sample, 1, 4))
 
-  # Keep the id for proper alignment
   kept_ids <- data_plot$id
   
   # Age groups
@@ -640,7 +634,6 @@ plot_age_seroprevalence_model_fits <- function(result, data, model_data, chains_
     right = FALSE
   )
   
-  # Attach fitted values from estimation stack (INLA predictions)
   idx_est <- inla.stack.index(result$stk.full, tag = "est")$data
   fit     <- result$output$summary.fitted.values[
     idx_est, c("mean", "0.025quant", "0.975quant")
@@ -1088,14 +1081,12 @@ aggregate_predictions_by_region <- function(
   }
   
   # --- spatial join ---
-  
   joined <- st_join(pred_sf, regions_sf[, region_col], left = FALSE)
   
   if (nrow(joined) == 0) {
     stop("No prediction points fall inside regions.")
   }
   
-  # --- population extraction if needed ---
   if (agg_type == "weighted_mean") {
     
     if (is.null(cam_pop)) {

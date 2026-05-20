@@ -3,4 +3,6 @@ oldfiles/
 .DS_Store
 
 
-Data/
+Data/*.tif
+Data/*.tiff
+Data/*.shp

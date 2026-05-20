@@ -210,14 +210,14 @@ cities_sf <- st_as_sf(
 
 cities_buffer <- cities_sf %>%
   st_transform(crs = 32632) %>%       # project to metres (UTM zone 32N for Cameroon)
-  st_buffer(dist = 100000) %>%         # 50km radius — adjust this
-  st_transform(crs = 4326)            # back to WGS84
+  st_buffer(dist = 100000) %>%         
+  st_transform(crs = 4326)          
 
 
-# 2. Find which chik_pos points fall within either buffer
+# which chik_pos points fall within either buffer
 chik_in_cities <- chik_pos %>%
   st_join(cities_buffer, join = st_within) %>%
-  filter(!is.na(city))                # keep only those within a buffer
+  filter(!is.na(city))                
 
 # 3. Calculate the proportion
 total_cases    <- sum(chik_pos$n)

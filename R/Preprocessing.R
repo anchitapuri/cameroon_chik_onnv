@@ -25,8 +25,9 @@ library(patchwork)
 
 # --- Read data files 
 # original data
-meta_data <- read.csv(here(data, 'base_complete_MFI_meta.csv'))
-nrow(meta_data)
+meta_data <- read.csv(here(data, 'MFI_meta.csv'))
+                   
+
 # shapefile #1
 cam_shapefile_districts <- read_sf(here(data, 'Caedistricts179_region.shp'))
 # Second shapefile used (to find remaining mismatched districts)
