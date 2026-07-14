@@ -29,7 +29,6 @@ library(colorspace)
 library(ggspatial)
 
 
-
 # --- Source functions
 source(here('R/Functions.R'))
 
@@ -133,10 +132,13 @@ meta_data_with_labels$Northing <- meta_data_with_coords$Northing
 meta_data_onnv_samples$Easting <- meta_data_with_coords_supp_materials$Easting
 meta_data_onnv_samples$Northing <- meta_data_with_coords_supp_materials$Northing
 
+colnames(meta_data_with_labels)
 
 # Rename
 model_data <- meta_data_with_labels
 model_data_onnv_samples <- meta_data_onnv_samples
+
+colnames(model_data)
 
 # Check for missing data / NA
 sum(is.na(model_data$AgeInYears))
@@ -151,7 +153,6 @@ onnv_results_pop_grid <- run_inla(
   cam_pop = cam_pop,
   positive_col = "ONNV_pos")
 
-
 # --- Run INLA model for ONNV (with historic year of intro 1900)
 onnv_results_pop_grid_onnv_samples <- run_inla(
   year_intro = 1900,
@@ -160,13 +161,51 @@ onnv_results_pop_grid_onnv_samples <- run_inla(
   positive_col = "ONNV_pos")
 
 
+# --- Run INLA model with covariates - An. Gam and log pop density
+
+# extract covariates for each grid cell
+cam_pop_agg <- terra::aggregate(cam_pop, fact = 10, fun = sum, na.rm = TRUE)
+grid_pts    <- terra::as.points(cam_pop_agg, values = TRUE, na.rm = TRUE)  # same order as coop
+cell_km2_agg <- terra::cellSize(cam_pop_agg, unit = "km")
+dens_agg     <- cam_pop_agg / cell_km2_agg
+
+covar_grid <- data.frame(
+  gam_pw_district = terra::extract(anopheles_gambiae, grid_pts)[, 2],
+  log_pop_density = log(terra::extract(dens_agg, grid_pts)[, 2] + 1)
+)
+
+onnv_results_pop_grid_multivariable <- run_inla_multivariable(
+  year_intro   = 1900,
+  data         = model_data,
+  cam_pop      = cam_pop,
+  positive_col = "ONNV_pos",
+  covars       = c("gam_pw_district", "log_pop_density"),
+  covar_grid   = covar_grid
+) 
+
+
+covar_table <- function(res, digits = 2) {
+  sf <- res$output$summary.fixed
+  sf <- sf[rownames(sf) != "Intercept", , drop = FALSE]   # drop intercept
+
+  data.frame(
+    Covariate = sub("_z$", " (per 1 SD)", rownames(sf)),
+    RateRatio = round(exp(sf$mean), digits),
+    ciL       = round(exp(sf$`0.025quant`), digits),
+    ciU       = round(exp(sf$`0.975quant`), digits),
+    row.names = NULL
+  )
+}
+covar_table(onnv_results_pop_grid_multivariable)
+
 # --- Save prediction results 
 saveRDS(onnv_results_pop_grid, here('Results/ONNV_INLAResults.rds'))
 saveRDS(onnv_results_pop_grid_onnv_samples, here('Results/ONNV_INLAResults_ONNV_samples.rds'))
+saveRDS(onnv_results_pop_grid_multivariable, here('Results/ONNV_INLAResults_multivariable.rds'))
 
 # Read saved results
 onnv_results_pop_grid <- readRDS(here('Results/ONNV_INLAResults.rds'))
-
+onnv_results_pop_grid_multivariable <- readRDS(here('Results/ONNV_INLAResults_multivariable.rds'))
 
 # --- SPATIAL PREDICTIONS: # Overall cameroon estimates ---- 
 # overall FOI
@@ -176,6 +215,8 @@ est_cameroonwide_foi <- list(
   ciL  = exp(foi_summary$`0.025quant`),
   ciU  = exp(foi_summary$`0.975quant`)
 )
+est_cameroonwide_foi
+
 
 # onnv only samples model
 foi_summary_onnv_samples <- onnv_results_pop_grid_onnv_samples$output$summary.fixed
@@ -185,6 +226,57 @@ est_cameroonwide_foi_onnv_samples <- list(
   ciU  = exp(foi_summary_onnv_samples$`0.975quant`)
 )
 
+# --- covaraites model 
+foi_summary_multivariable <- onnv_results_pop_grid_multivariable$output$summary.fixed
+b0 <- foi_summary_multivariable["Intercept", ]
+
+est_cameroonwide_foi_multivariable <- list(
+  mean = exp(b0$mean),
+  ciL  = exp(b0$`0.025quant`),
+  ciU  = exp(b0$`0.975quant`)
+)
+est_cameroonwide_foi_multivariable
+
+
+# population weighted national FOI estimate, using the posterior samples from the INLA model
+national_foi <- function(res, cam_pop, agg_factor = 10, n = 1000) {
+
+  # population per grid cell, in the SAME order as res$coop
+  cam_pop_agg    <- terra::aggregate(cam_pop, fact = agg_factor, fun = sum, na.rm = TRUE)
+  cam_pop_points <- terra::as.points(cam_pop_agg, values = TRUE, na.rm = TRUE)
+  pop_grid       <- as.data.frame(cam_pop_points)[, 1]
+
+  stopifnot(length(pop_grid) == nrow(res$coop))   # alignment check
+
+  # posterior FOI surface: exp(Intercept + spatial.field), covariates = 0 at grid
+  samp   <- inla.posterior.sample(n, res$output)
+  b0_idx <- grep("^Intercept",     rownames(samp[[1]]$latent))
+  sf_idx <- grep("^spatial.field", rownames(samp[[1]]$latent))
+  Ap     <- inla.spde.make.A(mesh = res$mesh, loc = as.matrix(res$coop))
+
+  foi_draws <- sapply(samp, function(s) {
+    field <- as.numeric(Ap %*% s$latent[sf_idx, 1])
+    exp(s$latent[b0_idx, 1] + field)
+  })                                               # grid × n
+
+  # population-weighted national FOI, one value per draw
+  ok <- !is.na(pop_grid)
+  w  <- pop_grid[ok] / sum(pop_grid[ok])
+  foi_natl <- colSums(foi_draws[ok, ] * w)
+
+  list(
+    mean = mean(foi_natl),
+    ciL  = unname(quantile(foi_natl, 0.025)),
+    ciU  = unname(quantile(foi_natl, 0.975)),
+    surface_mean = rowMeans(foi_draws)             # per-cell FOI map if you want it
+  )
+}
+
+national_foi_spatial <- national_foi(onnv_results_pop_grid, cam_pop)
+national_foi_mv       <- national_foi(onnv_results_pop_grid_multivariable, cam_pop)
+
+national_foi_spatial[c("mean","ciL","ciU")] #  0.01699453 (0.01578925 - 0.01839481)
+national_foi_mv[c("mean","ciL","ciU")] # 0.01779024 (0.01613914 - 0.01992778)
 
 # -- cameroon wide summary 
 compute_foi_metrics <- function(foi_val, age_groups, w_age, cam_pop, total_cameroon_pop) {
@@ -373,6 +465,7 @@ region_level_predictions
 # Number of newly diagnosed Plasmodium falciparum cases per 1,000 population (using 2024)
 
 pf <- terra::rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/clippedlayers-4/202508_Global_Pf_Incidence_Rate_CMR_2024.tiff')
+pf[[1]]
 pf_rate <- pf[[1]]  # band 1 = incidence rate
   
 global(pf_rate, fun = c("min", "max"), na.rm = TRUE)

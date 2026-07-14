@@ -92,6 +92,93 @@ run_inla <- function(year_intro, data, cam_pop, positive_col) {
   ))
 }
 
+run_inla_multivariable <- function(year_intro, data, cam_pop, positive_col,
+                     covars = c("gam_pw_district", "log_pop_density"),
+                     covar_grid = NULL) {   
+
+  # Years of exposure
+  data$age_intro <- data$year_of_survey - year_intro
+  data$years_of_exposure <- pmin(data$age_intro, data$AgeInYears)
+  data <- data[!is.na(data$years_of_exposure) & data$years_of_exposure > 0, ]
+
+  data_points <- data %>%
+    st_drop_geometry() %>%
+    filter(!is.na(Easting) & !is.na(Northing)) %>%
+    filter(!is.na(.data[[positive_col]]))          # was hardcoded to ONNV_pos
+
+  # Drop rows missing any covariate, then standardise (store centre/scale for prediction)
+  data_points <- data_points[complete.cases(data_points[, covars]), ]
+  covar_means <- sapply(covars, function(v) mean(data_points[[v]]))
+  covar_sds   <- sapply(covars, function(v) sd(data_points[[v]]))
+  covars_z <- paste0(covars, "_z")
+  for (i in seq_along(covars)) {
+    data_points[[covars_z[i]]] <- (data_points[[covars[i]]] - covar_means[i]) / covar_sds[i]
+  }
+
+  # Mesh
+  cooe <- cbind(Easting = data_points$Easting, Northing = data_points$Northing)
+  mesh <- inla.mesh.2d(loc = cooe, max.edge = c(10, 40), cutoff = 10, offset = c(100, 200))
+
+  # Prediction grid
+  cam_pop_agg    <- terra::aggregate(cam_pop, fact = 10, fun = sum, na.rm = TRUE)
+  cam_pop_points <- terra::as.points(cam_pop_agg, values = TRUE, na.rm = TRUE)
+  cam_pop_sf  <- st_as_sf(cam_pop_points)
+  cam_pop_utm <- st_transform(cam_pop_sf, crs = 32633)
+  coop <- st_coordinates(cam_pop_utm) / 1000
+  colnames(coop) <- c("X", "Y")
+
+  # Covariate values at grid: 0 = mean (default), else standardise supplied raw values
+  if (is.null(covar_grid)) {
+    Xp <- matrix(0, nrow = nrow(coop), ncol = length(covars))
+  } else {
+    Xp <- sapply(seq_along(covars), function(i)
+      (covar_grid[[covars[i]]] - covar_means[i]) / covar_sds[i])
+  }
+  colnames(Xp) <- covars_z
+
+  # SPDE
+  spde    <- inla.spde2.matern(mesh = mesh, alpha = 2)
+  s.index <- inla.spde.make.index("spatial.field", spde$n.spde)
+  A  <- inla.spde.make.A(mesh = mesh, loc = cooe)
+  Ap <- inla.spde.make.A(mesh = mesh, loc = as.matrix(coop))
+
+  # Estimation stack (+ covariates)
+  eff.e <- cbind(data.frame(Intercept = 1, age = data_points$years_of_exposure),
+                 data_points[, covars_z, drop = FALSE])
+  stk.e <- inla.stack(data = list(y = data_points[[positive_col]]),
+                      A = list(1, A),
+                      effects = list(eff.e, spatial.field = s.index),
+                      tag = "est")
+
+  # Prediction stack (+ covariates)
+  eff.p <- cbind(data.frame(Intercept = 1, age = rep(1, nrow(coop))),
+                 as.data.frame(Xp))
+  stk.p <- inla.stack(tag = "pred",
+                      data = list(y = rep(NA, nrow(coop))),
+                      A = list(1, Ap),
+                      effects = list(eff.p, spatial.field = s.index))
+
+  stk.full <- inla.stack(stk.e, stk.p)
+
+  # Formula
+  form <- as.formula(paste("y ~ -1 + Intercept +",
+                           paste(covars_z, collapse = " + "),
+                           "+ offset(log(age)) + f(spatial.field, model = spde)"))
+
+  output <- inla(form,
+                 data = inla.stack.data(stk.full),
+                 family = "binomial", Ntrials = 1,
+                 control.family    = list(link = "cloglog"),
+                 control.predictor = list(A = inla.stack.A(stk.full), compute = TRUE, link = 1),
+                 control.compute   = list(dic = TRUE, config = TRUE),
+                 verbose = FALSE)
+
+  list(year = year_intro, output = output, dic = output$dic$dic,
+       mesh = mesh, stk.full = stk.full, data_filtered = data_points,
+       cooe = cooe, coop = coop,
+       covars = covars, covar_means = covar_means, covar_sds = covar_sds)
+}
+
 
 # --- Function to extract and plot FOI ---
 predicted_foi <- function(model, coop, pathogen_name = "ONNV") { 
@@ -130,7 +217,7 @@ predicted_foi <- function(model, coop, pathogen_name = "ONNV") {
         "#f46036",
         "#a4243b"
         ),
-      values = scales::rescale(c(0, 0.25, 0.5, 0.7, 0.85, 1)),
+      values = scales::rescale(c(0, 0.01, 0.02, 0.03, 0.04, 0.05)),
       name = "FOI (λ)",
       limits = c(0, max(foi_sf$foi)),
       guide = guide_colorbar(
@@ -271,6 +358,9 @@ predicted_seroprevalence <- function(foi_result, model, age_groups, age_weights,
     prev_range = range(prev_loc)
   ))
 }
+
+
+
 
 
 # --- Function to extract and plot annual infections ---
@@ -1179,6 +1269,51 @@ calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, 
     obs = obs_df,
     log_model = log_model
   )
+}
+
+
+# --- Propotion by mosquito distribution + log population (using binary serostatus)
+calculate_prop_by_variable_NEW <- function(data, var_col, positive_col, breaks_max, breaks_min) {
+
+  data <- data[!is.na(data[[positive_col]]), ]
+  var_mid  <- rep(NaN, length(breaks_max))
+  prop_pos <- matrix(NaN, length(breaks_max), 3)
+
+  n_bins <- length(breaks_max)
+
+  for (i in 1:n_bins) {
+
+    if (i == n_bins) {
+      # final bin: inclusive upper edge so value == breaks_max is kept
+      tmp <- which(data[[var_col]] <= breaks_max[i] &
+                   data[[var_col]] >= breaks_min[i])
+    } else {
+      tmp <- which(data[[var_col]] <  breaks_max[i] &
+                   data[[var_col]] >= breaks_min[i])
+    }
+
+    if (length(tmp) > 5) {
+      prop_pos[i, 1]   <- mean(data[[positive_col]][tmp], na.rm = TRUE)
+      a                <- prop.test(sum(data[[positive_col]][tmp]), length(tmp))
+      prop_pos[i, 2:3] <- a$conf.int
+      var_mid[i]       <- (breaks_min[i] + breaks_max[i]) / 2   # <-- midpoint, not mean
+    }
+  }
+
+  obs_df <- data.frame(
+    x    = var_mid,
+    y    = prop_pos[, 1],
+    ymin = prop_pos[, 2],
+    ymax = prop_pos[, 3]
+  )
+
+  model_df <- data[, c(var_col, positive_col)]
+  model_df <- model_df[complete.cases(model_df), ]
+
+  formula   <- as.formula(paste(positive_col, "~", var_col))
+  log_model <- glm(formula, family = binomial, data = model_df)
+
+  list(obs = obs_df, log_model = log_model)
 }
 
 

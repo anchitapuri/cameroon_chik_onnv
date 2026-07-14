@@ -9,8 +9,10 @@ cameroon <- ne_countries(country = "Cameroon", returnclass = "sf")
 onnv_results_pop_grid <- readRDS(here('Results/ONNV_INLAResults.rds'))
 
 # --- Cameroon wide maps 
-foi_onnv <- predicted_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
+foi_onnv <- predicted_foi_diff_col(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
 range(foi_onnv$foi_df$foi)
+
+print(foi_onnv$plot)
 
 # --- Prob of seropositive proportion 
 sero_onnv <- predicted_seroprevalence(
@@ -146,6 +148,11 @@ anoph_max <- seq(0, 1, 0.1)
 anoph_min <- anoph_max - 0.5
 anoph_min[which(anoph_min < 0)] <- 0
 
+# Proportion of Anopheles positive vs proportion of ONNV positive
+anoph_max <- seq(0, 1, 0.1)
+anoph_min <- anoph_max - 0.2
+anoph_min[which(anoph_min < 0)] <- 0
+
 
 # general plot format 
 base_theme <- theme_classic() +
@@ -215,7 +222,7 @@ make_plot <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
 }
 
 
-df_gam_binary <- calculate_prop_by_variable (
+df_gam_binary <- calculate_prop_by_variable_NEW (
   data = meta_data_with_labels,
   var_col = "gam_pw_district", 
   positive_col = "ONNV_pos",
@@ -229,7 +236,7 @@ prop_gam_prev <- make_plot(
   "Proportion Anopheles gambiae",
   color ="#165262", pos_col =  "ONNV_pos"
 )
-
+print(prop_gam_prev)
 # --- Save Figures
 ggsave(here('Results/fig4d.png'), 
        plot = prop_gam_prev,
