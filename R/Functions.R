@@ -1272,51 +1272,6 @@ calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, 
 }
 
 
-# --- Propotion by mosquito distribution + log population (using binary serostatus)
-calculate_prop_by_variable_NEW <- function(data, var_col, positive_col, breaks_max, breaks_min) {
-
-  data <- data[!is.na(data[[positive_col]]), ]
-  var_mid  <- rep(NaN, length(breaks_max))
-  prop_pos <- matrix(NaN, length(breaks_max), 3)
-
-  n_bins <- length(breaks_max)
-
-  for (i in 1:n_bins) {
-
-    if (i == n_bins) {
-      # final bin: inclusive upper edge so value == breaks_max is kept
-      tmp <- which(data[[var_col]] <= breaks_max[i] &
-                   data[[var_col]] >= breaks_min[i])
-    } else {
-      tmp <- which(data[[var_col]] <  breaks_max[i] &
-                   data[[var_col]] >= breaks_min[i])
-    }
-
-    if (length(tmp) > 5) {
-      prop_pos[i, 1]   <- mean(data[[positive_col]][tmp], na.rm = TRUE)
-      a                <- prop.test(sum(data[[positive_col]][tmp]), length(tmp))
-      prop_pos[i, 2:3] <- a$conf.int
-      var_mid[i]       <- (breaks_min[i] + breaks_max[i]) / 2   # <-- midpoint, not mean
-    }
-  }
-
-  obs_df <- data.frame(
-    x    = var_mid,
-    y    = prop_pos[, 1],
-    ymin = prop_pos[, 2],
-    ymax = prop_pos[, 3]
-  )
-
-  model_df <- data[, c(var_col, positive_col)]
-  model_df <- model_df[complete.cases(model_df), ]
-
-  formula   <- as.formula(paste(positive_col, "~", var_col))
-  log_model <- glm(formula, family = binomial, data = model_df)
-
-  list(obs = obs_df, log_model = log_model)
-}
-
-
 
 # --- Plot functions 
 make_plot_onnv <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {

@@ -150,7 +150,7 @@ anoph_min[which(anoph_min < 0)] <- 0
 
 # Proportion of Anopheles positive vs proportion of ONNV positive
 anoph_max <- seq(0, 1, 0.1)
-anoph_min <- anoph_max - 0.2
+anoph_min <- anoph_max - 0.3
 anoph_min[which(anoph_min < 0)] <- 0
 
 
@@ -222,14 +222,14 @@ make_plot <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
 }
 
 
-df_gam_binary <- calculate_prop_by_variable_NEW (
+df_gam_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,
   var_col = "gam_pw_district", 
   positive_col = "ONNV_pos",
   breaks_max = anoph_max, 
   breaks_min = anoph_min)
 
-
+summary(df_gam_binary$log_model)
 prop_gam_prev <- make_plot(
   df_gam_binary$obs,
   meta_data_with_labels$gam_pw_district,

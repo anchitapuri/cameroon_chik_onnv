@@ -22,10 +22,15 @@ library(readxl)
 library(geodata)
 library(ggspatial)
 library(patchwork)
-
+# --- Source functions
+source(here('R/Functions.R'))
 # --- Read data files 
 # original data
-meta_data <- read.csv(here(data, 'MFI_meta.csv'))
+data_dir <- 'Data'
+meta_data <- read.csv(here(data_dir, 'MFI_meta.csv'))
+
+
+head(meta_data)
                    
 
 # shapefile #1
