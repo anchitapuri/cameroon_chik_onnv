@@ -180,6 +180,102 @@ run_inla_multivariable <- function(year_intro, data, cam_pop, positive_col,
 }
 
 
+# --- Function to extract FOI (national level)
+national_foi <- function(res, cam_pop, agg_factor = 10, n = 1000) {
+
+  # population per grid cell - same order as res$coop
+  cam_pop_agg    <- terra::aggregate(cam_pop, fact = agg_factor, fun = sum, na.rm = TRUE)
+  cam_pop_points <- terra::as.points(cam_pop_agg, values = TRUE, na.rm = TRUE)
+  pop_grid  <- as.data.frame(cam_pop_points)[, 1] # [,1] = populationvalues 
+
+  # check alingment 
+  stopifnot(length(pop_grid) == nrow(res$coop))   # alignment check
+
+  # posterior FOI : exp(Intercept + spatial.field)
+  # sample from posterior; n = 1000 sample 
+  samp   <- inla.posterior.sample(n, res$output)
+
+  b0_idx <- grep("^Intercept",     rownames(samp[[1]]$latent)) # position of the intercept row
+  sf_idx <- grep("^spatial.field", rownames(samp[[1]]$latent)) # positions of the field rows (all mesh nodes)
+  # coop grid locations
+  Ap     <- inla.spde.make.A(mesh = res$mesh, loc = as.matrix(res$coop))
+
+  # at each grid cell, for each draw, calculate FOI = exp(Intercept + spatial.field)
+  foi_draws <- sapply(samp, function(s) {
+    field <- as.numeric(Ap %*% s$latent[sf_idx, 1])
+    exp(s$latent[b0_idx, 1] + field)
+  })                                               # grid × n
+
+  # population-weighted national FOI, one value per draw
+  # weigh each foi estimated by population in that cell 
+  ok <- !is.na(pop_grid)
+  w  <- pop_grid[ok] / sum(pop_grid[ok])
+  foi_natl <- colSums(foi_draws[ok, ] * w)
+
+  list(
+    mean = mean(foi_natl),
+    ciL  = unname(quantile(foi_natl, 0.025)),
+    ciU  = unname(quantile(foi_natl, 0.975))
+  )
+}
+
+# --- Function to extract FOI (national level) with covariates
+national_foi_covars <- function(res, cam_pop, covar_grid = NULL, agg_factor = 10,
+                                n = 1000, chunk = 200) {
+
+  # population per grid cell, aligned to res$coop
+  cam_pop_agg <- terra::aggregate(cam_pop, fact = agg_factor, fun = sum, na.rm = TRUE)
+  pop_grid    <- as.data.frame(terra::as.points(cam_pop_agg, values = TRUE, na.rm = TRUE))[, 1]
+  stopifnot(length(pop_grid) == nrow(res$coop))
+  ok <- !is.na(pop_grid); w <- pop_grid[ok] / sum(pop_grid[ok])
+
+  # standardise grid covariates (NA -> 0 = mean, so a stray no-data cell can't poison the sum)
+  has_cov <- !is.null(covar_grid) && length(res$covars) > 0
+  if (has_cov) {
+    stopifnot(nrow(covar_grid) == nrow(res$coop))
+    covars <- res$covars; covars_z <- paste0(covars, "_z")
+    Xg <- sapply(seq_along(covars), function(i)
+            (covar_grid[[covars[i]]] - res$covar_means[i]) / res$covar_sds[i])
+    Xg[is.na(Xg)] <- 0
+    Xg <- Xg[ok, , drop = FALSE]
+  }
+
+  sel <- list(Intercept = 1, spatial.field = seq_len(res$mesh$n))
+  if (has_cov) for (cz in covars_z) sel[[cz]] <- 1
+
+  Ap_ok <- inla.spde.make.A(mesh = res$mesh, loc = as.matrix(res$coop))[ok, , drop = FALSE]
+
+  # find latent positions ONCE (one small named draw), not inside the loop
+  rn   <- rownames(inla.posterior.sample(1, res$output, selection = sel)[[1]]$latent)
+  b0_i <- grep("^Intercept",     rn)
+  sf_i <- grep("^spatial.field", rn)
+  bt_i <- if (has_cov) vapply(covars_z, function(cz) grep(paste0("^", cz), rn), integer(1)) else NULL
+
+  # sample in chunks; keep only running totals, free each chunk
+  foi_natl <- numeric(n); surf_sum <- numeric(sum(ok)); done <- 0
+  while (done < n) {
+    k    <- min(chunk, n - done)
+    samp <- inla.posterior.sample(k, res$output, selection = sel, add.names = FALSE)
+    for (d in seq_len(k)) {
+      lat <- samp[[d]]$latent
+      eta <- lat[b0_i, 1] + as.numeric(Ap_ok %*% lat[sf_i, 1])
+      if (has_cov) eta <- eta + as.numeric(Xg %*% lat[bt_i, 1])
+      lam <- exp(eta)
+      foi_natl[done + d] <- sum(w * lam)
+      surf_sum <- surf_sum + lam
+    }
+    rm(samp); gc()
+    done <- done + k
+  }
+
+  list(mean = mean(foi_natl),
+       ciL  = unname(quantile(foi_natl, 0.025)),
+       ciU  = unname(quantile(foi_natl, 0.975)),
+       surface_mean = surf_sum / n)
+}
+
+
+
 # --- Function to extract and plot FOI ---
 predicted_foi <- function(model, coop, pathogen_name = "ONNV") { 
   # Get prediction indices
@@ -358,9 +454,6 @@ predicted_seroprevalence <- function(foi_result, model, age_groups, age_weights,
     prev_range = range(prev_loc)
   ))
 }
-
-
-
 
 
 # --- Function to extract and plot annual infections ---
@@ -1377,90 +1470,3 @@ make_plot_chik <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") 
 }
 
 
-
-calculate_prop_by_variable_multisero_probs <- function(data, var_col, chains_df, infM, pathogen_col, breaks_max, breaks_min) {
-  
-  positive_components <- which(infM[, pathogen_col] == 1)
-  
-  data_plot <- data %>%
-    filter(!is.na(.data[[var_col]]), !is.na(stan_idx_full_model))
-  
-  kept_indices <- data_plot$stan_idx_full_model  # <-- use this, not $id
-  
-  nrow(data_plot)
-
-  prob_cols_list <- lapply(positive_components, function(comp) {
-    cols <- sprintf("post_prob[%d,%d]", kept_indices, comp)
-    missing_cols <- setdiff(cols, colnames(chains_df))
-    if (length(missing_cols) > 0) {
-      stop("Missing posterior columns: ", paste(head(missing_cols), collapse = ", "))
-    }
-    cols
-  })
-  
-  probs_all_draws <- Reduce(`+`, lapply(prob_cols_list, function(cols) {
-    as.matrix(chains_df[, cols])
-  }))
-
-
-  n_draws <- nrow(probs_all_draws)
-
-  # --- Bin individuals by the continuous variable
-  bin_indices <- lapply(seq_along(breaks_max), function(i) {
-    which(data_plot[[var_col]] >= breaks_min[i] & data_plot[[var_col]] < breaks_max[i])
-  })
-
-  # --- For each draw, compute mean probability in each bin
-  prevalence_draws <- map_dfr(1:n_draws, function(draw_num) {
-    probs_this_draw <- probs_all_draws[draw_num, ]
-
-    map_dfr(seq_along(breaks_max), function(i) {
-      idx <- bin_indices[[i]]
-      if (length(idx) <= 5) return(NULL)          # same minimum-n guard as before
-
-      tibble(
-        bin         = i,
-        var_mid     = mean(data_plot[[var_col]][idx], na.rm = TRUE),
-        prevalence  = mean(probs_this_draw[idx],     na.rm = TRUE),
-        n           = length(idx),
-        draw        = draw_num
-      )
-    })
-  })
-
-  # --- Summarise across draws: median + 95 % credible interval
-  obs <- prevalence_draws %>%
-    group_by(bin, var_mid, n) %>%
-    dplyr::summarise(
-      y    = median(prevalence),
-      ymin = quantile(prevalence, 0.025),
-      ymax = quantile(prevalence, 0.975),
-      .groups = "drop"
-    ) %>%
-    dplyr::select(x = var_mid, y, ymin, ymax)         
- 
-
-    # posterior mean per individual
-    posterior_mean_probs <- colMeans(probs_all_draws)
-
-
-    #logistic regression 
-    model_df <- data_plot %>%
-    mutate(prob_positive = posterior_mean_probs)
-
-    formula <- as.formula(paste("prob_positive ~", var_col))
-
-    log_model <- glm(
-      formula,
-      family = quasibinomial,
-      data = model_df
-    )
-
-    model_df$logit_pred <- predict(log_model, type = "response")
-
-
-  return(list( obs = obs,
-  model_df = model_df,
-  log_model = log_model))
-}
- 

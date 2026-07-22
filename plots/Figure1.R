@@ -72,7 +72,6 @@ fig1a <- ggplot() +
   scale_size_continuous(name = "Number of \nSamples", range = c(2, 10),
                         breaks = seq(0, max(location_counts$n_samples), by = 30)) +
   annotation_scale(
-    plot_unit = "km",
     bar_cols = c("black", "white"),  # alternating black/white like the reference
     height = unit(0.2, "cm"),
     text_family = "sans",
