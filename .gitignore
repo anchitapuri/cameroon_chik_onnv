@@ -1,0 +1,7 @@
+Results/*.rds
+Results/*.csv
+oldfiles/
+.DS_Store
+Data/*.tif
+Data/*.tiff
+Data/*.shp
