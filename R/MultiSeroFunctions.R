@@ -421,88 +421,52 @@ plot_fits <- function(chains, data, pathogens, show_crossreactive_for = NULL){
 
 
 
-# --- Plot cross reactivity - ONNV vs CHIK
-plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
-  
-  # Extract values for each combination
-  # ONNV homologous
-  onnv_mu1_med <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(med)
-  onnv_mu1_ciL <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(ciL)
-  onnv_mu1_ciU <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(ciU)
-  
-  # CHIK homologous
-  chik_mu1_med <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(med)
-  chik_mu1_ciL <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(ciL)
-  chik_mu1_ciU <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(ciU)
 
-  # ONNV → CHIK cross-reactive
-  onnv_to_chik_phi_med <- phi_df %>% filter(pos == "ONNV_VLP_log", neg == "CHIKV_sE2_log") %>% pull(med)
-  onnv_to_chik_phi_ciL <- phi_df %>% filter(pos == "ONNV_VLP_log", neg == "CHIKV_sE2_log") %>% pull(ciL)
-  onnv_to_chik_phi_ciU <- phi_df %>% filter(pos == "ONNV_VLP_log", neg == "CHIKV_sE2_log") %>% pull(ciU)
-  
-  # CHIK → ONNV cross-reactive
-  chik_to_onnv_phi_med <- phi_df %>% filter(pos == "CHIKV_sE2_log", neg == "ONNV_VLP_log") %>% pull(med)
-  chik_to_onnv_phi_ciL <- phi_df %>% filter(pos == "CHIKV_sE2_log", neg == "ONNV_VLP_log") %>% pull(ciL)
-  chik_to_onnv_phi_ciU <- phi_df %>% filter(pos == "CHIKV_sE2_log", neg == "ONNV_VLP_log") %>% pull(ciU)
-  
-  # Calculate cross-reactive increases (phi × mu1)
-  onnv_to_chik_increase_med <- onnv_to_chik_phi_med * onnv_mu1_med
-  onnv_to_chik_increase_ciL <- onnv_to_chik_phi_ciL * onnv_mu1_ciL
-  onnv_to_chik_increase_ciU <- onnv_to_chik_phi_ciU * onnv_mu1_ciU
-  
-  chik_to_onnv_increase_med <- chik_to_onnv_phi_med * chik_mu1_med
-  chik_to_onnv_increase_ciL <- chik_to_onnv_phi_ciL * chik_mu1_ciL
-  chik_to_onnv_increase_ciU <- chik_to_onnv_phi_ciU * chik_mu1_ciU
-  
-  # Create plotting data - 4 rows total
-  plot_data <- tibble(
-    antigen = c("ONNV_VLP_log", "ONNV_VLP_log", "CHIKV_sE2_log", "CHIKV_sE2_log"),
-    response_type = c("Homologous", "Cross-reactive \n(φ × μ1)", 
-                      "Homologous", "Cross-reactive \n(φ × μ1)"),
-    increase = c(
-      onnv_mu1_med,                  # ONNV homologous
-      chik_to_onnv_increase_med,     # CHIK → ONNV cross-reactive
-      chik_mu1_med,                  # CHIK homologous
-      onnv_to_chik_increase_med      # ONNV → CHIK cross-reactive
-    ),
-    ciL = c(
-      onnv_mu1_ciL,
-      chik_to_onnv_increase_ciL,
-      chik_mu1_ciL,
-      onnv_to_chik_increase_ciL
-    ),
-    ciU = c(
-      onnv_mu1_ciU,
-      chik_to_onnv_increase_ciU,
-      chik_mu1_ciU,
-      onnv_to_chik_increase_ciU
-    ),
-    infecting_virus = c("ONNV VLP", "CHIKV E2", "CHIKV E2", "ONNV VLP")
-  ) %>%
-    mutate(
-      response_type = factor(response_type, levels = c("Homologous", "Cross-reactive \n(φ × μ1)")),
-      antigen_label = ifelse(antigen == "ONNV_VLP_log", "ONNV VLP Antigen", "CHIKV E2 Antigen")
-    )
-  
-  p <- ggplot(plot_data, aes(x = response_type, y = increase, fill = infecting_virus)) +
-    geom_col(position = position_dodge(width = 0.8), width = 0.7, alpha = 0.8) +
-    geom_errorbar(aes(ymin = ciL, ymax = ciU), 
-                  position = position_dodge(width = 0.8), 
-                  width = 0.25, linewidth = 0.8) +
+
+# --- Plot homologous vs cross-reactive titres (ONNV & CHIKV)
+# Homologous   = mu0 + mu1        (from mus1, single-infection components)
+# Cross-reactive = mu0 + phi*mu1  (from mus0, antigen negative / other virus positive)
+# Both are posterior medians and 95% CrIs of per-draw values, so CrIs are correct.
+plot_titre_responses <- function(mu) {
+
+  viruses <- c("ONNV_VLP_log", "CHIKV_sE2_log")
+
+  hom <- mu$mus1 %>%
+    dplyr::filter(pos == antigen, antigen %in% viruses) %>%
+    dplyr::mutate(response_type = "Homologous", infecting = antigen)
+
+  cr <- mu$mus0 %>%
+    dplyr::filter(pos %in% viruses, antigen %in% viruses) %>%
+    dplyr::mutate(response_type = "Cross-reactive", infecting = pos)
+
+  baseline <- mu$mus0 %>%
+    dplyr::filter(pos == "neg", antigen %in% viruses)
+
+  label_antigen <- function(x) factor(
+    ifelse(x == "ONNV_VLP_log", "ONNV VLP Antigen", "CHIKV E2 Antigen"),
+    levels = c("ONNV VLP Antigen", "CHIKV E2 Antigen"))
+
+  plot_data <- dplyr::bind_rows(hom, cr) %>%
+    dplyr::mutate(
+      response_type   = factor(response_type, levels = c("Homologous", "Cross-reactive")),
+      antigen_label   = label_antigen(antigen),
+      infecting_virus = ifelse(infecting == "ONNV_VLP_log", "ONNV VLP", "CHIKV E2")
+    ) %>%
+    dplyr::select(antigen, antigen_label, response_type, infecting_virus, med, ciL, ciU)
+
+  baseline <- baseline %>% dplyr::mutate(antigen_label = label_antigen(antigen))
+
+  p <- ggplot(plot_data, aes(x = response_type, y = med, fill = infecting_virus)) +
+    geom_col(width = 0.7, alpha = 0.8) +
+    geom_errorbar(aes(ymin = ciL, ymax = ciU), width = 0.25, linewidth = 0.8) +
     facet_wrap(~ antigen_label) +
-    scale_fill_manual(
-      values = c("ONNV VLP" = "#648767", "CHIKV E2" = "#715F95"),
-      name = "Infecting pathogen"
-    )  +
-    labs(
-      x = "",
-      y = "Antibody titer increase (log units)"
-    ) +
+    scale_fill_manual(values = c("ONNV VLP" = "#648767", "CHIKV E2" = "#715F95"),
+                      name = "Infecting pathogen") +
+    labs(x = "", y = "Antibody titre (log MFI)") +
     theme_bw() +
     theme(
       aspect.ratio = 1,
       panel.grid = element_blank(),
-      plot.title = element_text(hjust = 0.5, size = 20),
       axis.text.x = element_text(size = 20, angle = 20, hjust = 0.8),
       axis.text.y = element_text(size = 20),
       axis.title = element_text(size = 20),
@@ -511,66 +475,11 @@ plot_titer_increases_comparison <- function(phi_df, mu_mus1) {
       legend.position = "bottom",
       legend.box.margin = margin(t = -20, r = 0, b = 0, l = 0),
       legend.title = element_text(size = 20),
-      legend.text = element_text(size = 20),
-      panel.grid.major.x = element_blank(),
+      legend.text = element_text(size = 20)
     )
-  
-  return(list(p = p, plot_data = plot_data))
+
+  list(p = p, plot_data = plot_data)
 }
-
-titer_increases_comparison_mayv <- function(phi_df, mu_mus1) {
-  # ONNV homologous
-  onnv_mu1_med <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(med)
-  onnv_mu1_ciL <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(ciL)
-  onnv_mu1_ciU <- mu_mus1 %>% filter(pos == "ONNV_VLP_log") %>% pull(ciU)
-  
-  # CHIK homologous
-  chik_mu1_med <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(med)
-  chik_mu1_ciL <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(ciL)
-  chik_mu1_ciU <- mu_mus1 %>% filter(pos == "CHIKV_sE2_log") %>% pull(ciU)
-
-  # MAYV → ONNV cross-reactive
-  mayv_to_onnv_phi_med <- phi_df %>% 
-    filter(pos == "ONNV_VLP_log", neg == "MAYV_E2_log") %>% 
-    pull(med)
-  
-  mayv_to_onnv_phi_ciL <- phi_df %>% 
-    filter(pos == "ONNV_VLP_log", neg == "MAYV_E2_log") %>% 
-    pull(ciL)
-  
-  mayv_to_onnv_phi_ciU <- phi_df %>% 
-    filter(pos == "ONNV_VLP_log", neg == "MAYV_E2_log") %>% 
-    pull(ciU)
-  
-  # MAYV → CHIK cross-reactive
-  mayv_to_chik_phi_med <- phi_df %>% 
-    filter(pos == "CHIKV_sE2_log", neg == "MAYV_E2_log") %>% 
-    pull(med)
-  
-  mayv_to_chik_phi_ciL <- phi_df %>% 
-    filter(pos == "CHIKV_sE2_log", neg == "MAYV_E2_log") %>% 
-    pull(ciL)
-  
-  mayv_to_chik_phi_ciU <- phi_df %>% 
-    filter(pos == "CHIKV_sE2_log", neg == "MAYV_E2_log") %>% 
-    pull(ciU)
-
-  # Calculate cross-reactive increases (phi × mu1)
-  onnv_to_may_increase_med <- mayv_to_onnv_phi_med * onnv_mu1_med
-  onnv_to_may_increase_ciL <- mayv_to_onnv_phi_ciL * onnv_mu1_ciL
-  onnv_to_may_increase_ciU <- mayv_to_onnv_phi_ciU * onnv_mu1_ciU
-  
-  chik_to_may_increase_med <- mayv_to_chik_phi_med * chik_mu1_med
-  chik_to_may_increase_ciL <- mayv_to_chik_phi_ciL * chik_mu1_ciL
-  chik_to_may_increase_ciU <- mayv_to_chik_phi_ciU * chik_mu1_ciU
-  
-  
-  return(list(
-    mayv_to_onnv = c(med = onnv_to_may_increase_med, ciL = onnv_to_may_increase_ciL, ciU = onnv_to_may_increase_ciU),
-    mayv_to_chik = c(med = chik_to_may_increase_med, ciL = chik_to_may_increase_ciL, ciU = chik_to_may_increase_ciU)
-  ))
-}
-
 
 # --- Plot proportion positive 
 plot_seroprevalence <- function(chains_df) {

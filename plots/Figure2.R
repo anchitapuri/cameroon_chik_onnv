@@ -61,8 +61,8 @@ ggsave(
 titres_plot <- plot_titres_coloured_by_clusters(meta_data_with_labels)
 print(titres_plot)
 
-# Fig 2c --  titre increease due to infection / CR for each pathogen
-p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
+# Fig 2e --  titre increease due to infection / CR for each pathogen
+p_CR <- plot_titre_responses(mu)
 print(p_CR)
 
 ggsave(

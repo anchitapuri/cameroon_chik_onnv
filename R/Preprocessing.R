@@ -28,38 +28,36 @@ source(here('R/Functions.R'))
 # original data
 data_dir <- 'Data'
 meta_data <- read.csv(here(data_dir, 'MFI_meta.csv'))
-
-
 head(meta_data)
                    
 
 # shapefile #1
-cam_shapefile_districts <- read_sf(here(data, 'Caedistricts179_region.shp'))
+cam_shapefile_districts <- read_sf(here(data_dir, 'S4_Cameroon_health_districts_files/Caedistricts179_region.shp'))
 # Second shapefile used (to find remaining mismatched districts)
-cam_shapefile_districts2 <- read_sf(here(data, 'cmr_admin3.shp'))
+cam_shapefile_districts2 <- read_sf(here(data_dir, 'cmr_admin_boundaries/cmr_admin3.shp'))
 
 
 
 # Load population rasters
-cam_pop <- rast(here(data, 'cmr_ppp_2020_UNadj.tif'))
-cam_pop_den <- rast(here(data, 'cmr_pd_2020_1km_UNadj.tif'))
+cam_pop <- rast(here(data_dir, 'cmr_ppp_2020_UNadj.tif'))
+cam_pop_den <- rast(here(data_dir, 'cmr_pd_2020_1km_UNadj.tif'))
 
 # Load mosquito maps
-aegypti <- rast(here(data, 'Aedes_maps_public', 'aegypti.tif'))
-albopictus <- rast(here(data, 'Aedes_maps_public', 'albopictus.tif'))
-anopheles_funestus <- rast(here(data, 'Anopheles_maps', '2010_Anopheles_funestus_CMR.tiff'))
-anopheles_gambiae <- rast(here(data, 'Anopheles_maps', '2010_Anopheles_gambiae_ss_CMR.tiff'))
+aegypti <- rast(here(data_dir, 'Aedes_maps_public', 'aegypti.tif'))
+albopictus <- rast(here(data_dir, 'Aedes_maps_public', 'albopictus.tif'))
+anopheles_funestus <- rast(here(data_dir, '2010_Anopheles_funestus_CMR.tiff'))
+anopheles_gambiae <- rast(here(data_dir, '2010_Anopheles_gambiae_ss_CMR.tiff'))
 
 
 
 # Load population by gender / age data 
-cameroon_age_2025 <- read.csv(here(data, 'CameroonAge2025.csv'))
+cameroon_age_2025 <- read.csv(here(data_dir, 'CameroonAge2025.csv'))
 cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
 
 
 # excel sheet with additional district geometeries - these were missing from both the shapefiles
-missing_districts_geometeries <- read_excel(here(data, 'Districts_sante_2021.xls'), sheet = "Sheet2")
+missing_districts_geometeries <- read_excel(here(data_dir, 'Districts_sante_2021.xls'), sheet = "Sheet2")
 
 
 # drop NAs 
@@ -75,7 +73,7 @@ sum(meta_data$AgeInYears == 0, na.rm = TRUE) #117
 sum(is.na(meta_data$Sex))  #22
 unique(meta_data$Sex)
 sum(meta_data$Sex == 9, na.rm = TRUE) #9
-sum(is.na(meta_data$DistrictOfresidence)) #3
+sum(is.na(meta_data$DistrictOfresidence)) 
 
 
 # ---1) Match district names in data with shapefiles to extract geometry for each district 
@@ -113,7 +111,7 @@ other_districts <- cam_shapefile_districts %>%
 # Combine
 cam_shapefile_districts_merged <- bind_rows(other_districts, manoka_merged)
 length(unique(cam_shapefile_districts_merged$geometry)) #179 unique geometeries and districts 
-View(cam_shapefile_districts_merged)
+
 
 
 # --- Meta Data ---
@@ -230,7 +228,7 @@ sum(unmatched_districts$n)
 # Drop NAs and Chad rows
 meta_data_districts_added <- meta_data_districts_added |>
   filter(!is.na(district_lower),
-         !district_lower %in% c("abeche", "biltine"))
+         !district_lower %in% c("na", "abeche", "biltine"))
 nrow(meta_data_districts_added) #6331
 
 length(unique(meta_data_districts_added$district_lower)) # 195
@@ -280,16 +278,36 @@ ggplot() +
 
 sf_use_s2(FALSE)
 # Spatial join: finds which polygon each point falls within
-mapped_districts <- st_join(
-  missing_districts_geometeries_sf,
-  cam_shapefile_districts_merged[, c("shapefile_district_lower")],
-  join = st_intersects
-)
+#mapped_districts <- st_join(
+  #missing_districts_geometeries_sf,
+  #cam_shapefile_districts_merged[, c("shapefile_district_lower")],
+  #join = st_intersects
+#)
 
-district_lookup <- mapped_districts %>%
+#district_lookup <- mapped_districts %>%
+  #st_drop_geometry() %>%
+ # dplyr::select(District, shapefile_district_lower)
+#district_lookup
+
+
+# Assign each missing-district point to exactly one shapefile polygon:
+# the polygon it falls in (distance 0), or the nearest polygon if it falls outside all of them.
+# Project to UTM so distances are in metres, not degrees.
+shp_utm <- st_transform(cam_shapefile_districts_merged, 32633)
+pts_utm <- st_transform(missing_districts_geometeries_sf, 32633)
+nearest_idx <- st_nearest_feature(pts_utm, shp_utm)
+
+district_lookup <- missing_districts_geometeries_sf %>%
   st_drop_geometry() %>%
-  dplyr::select(District, shapefile_district_lower)
-district_lookup
+  dplyr::transmute(
+    District = tolower(District),
+    shapefile_district_lower = shp_utm$shapefile_district_lower[nearest_idx],
+    inside_polygon = lengths(st_intersects(pts_utm, shp_utm)) > 0,
+    dist_km = as.numeric(st_distance(pts_utm, shp_utm[nearest_idx, ], by_element = TRUE)) / 1000
+  )
+
+
+
 # replace meta data missing districs with mapped districts 
 meta_data_districts_added <- meta_data_districts_added %>%
   left_join(district_lookup,
@@ -304,7 +322,14 @@ meta_data_with_coords <- meta_data_districts_added %>%
             by = c("district_lower" = "shapefile_district_lower"))
 
 
-cat("Rows with geometry:", sum(!is.na(st_is_empty(meta_data_with_coords$geometry))), "\n")
+
+
+# Every district in the data must now exist in the shapefile
+unmatched <- setdiff(unique(meta_data_districts_added$district_lower),
+                     cam_shapefile_districts_unique$shapefile_district_lower)
+unmatched                                  # should print character(0)
+stopifnot(length(unmatched) == 0)
+
 
 
 # Plot to validate districts 
@@ -316,6 +341,7 @@ ggplot(sf_meta_data_with_coords) +
   geom_sf() +
   geom_sf_text(aes(label = district_lower), size = 2, check_overlap = TRUE) +
   theme_minimal()
+
 
 
 # total 6331 rows with valid geometry!
@@ -383,8 +409,6 @@ centroids_df <- exact_extract(
 sum(centroids_df$Total_Population)
 
 
-
-
 # --- 3) Population-Weighted Mosquito Value
 # Calculates the average mosquito density (Aedes aegypti, Aedes albopictus, Anopheles funestus, Anopheles gambiae) experienced by the population in each district. 
 # Each raster cell's mosquito value is weighted by the number of people living in that cell, then averaged across the district. 
@@ -422,6 +446,9 @@ pop_weighted_mean_fun <- function(df, var_name, ...) {
   weighted_mean <- sum(df[[var_name]] * pop_count, na.rm = TRUE) / total_pop
   setNames(data.frame(weighted_mean), paste0(var_name, "_pw_district"))
 }
+
+
+
 
 # Calculate mosquito distributions
 aeg_pw_df <- exact_extract(
@@ -464,6 +491,7 @@ gam_pw_df <- exact_extract(
   progress = TRUE
 ) %>%
   mutate(district_id = districts$district_id, district_lower = districts$district_lower)
+
 
 
 # --- Combine all into one dataframe 
@@ -536,11 +564,12 @@ write.csv(preprocessed_meta_data_without_coords,
           here('Results/meta_data_without_coords.csv'), 
           row.names = FALSE)
 
-
+nrow(preprocessed_meta_data_without_coords)
 
 sf_meta_data_with_coords_pw_filtered <- readRDS('Results/meta_data_with_coords.rds')
+
 preprocessed_meta_data_without_coords <- read.csv('Results/meta_data_without_coords.csv')
-nrow(preprocessed_meta_data_without_coords)
+
 
 # # Drop NAs and age = 0 and sex = 9 
 meta_data_clean_with_coords <- subset(
@@ -566,7 +595,6 @@ meta_data_clean_without_coords <- subset(
   Sex != 9
 )
 
-
 nrow(meta_data_clean_with_coords) #5272
 nrow(meta_data_clean_without_coords) #5272
 
@@ -583,6 +611,6 @@ meta_data_without_coords_supp_materials <- subset(
   !is.na(Sex) &
   Sex != 9
 )
-
+nrow(meta_data_without_coords_supp_materials)
 
 saveRDS(meta_data_without_coords_supp_materials, here('Results/meta_data_without_coords_supp_materials.rds'))

@@ -55,43 +55,56 @@ meta_data_with_labels <- read.csv('Results/meta_data_with_labels.csv')
 
 # --- Proportion positive by mosquito distributions (only ONNV) (using multisero probs)
 # Anopheles bins (adjust if needed based on your data range
-anoph_max <- seq(0, 1, 0.1)
-anoph_min <- anoph_max - 0.5
-anoph_min[which(anoph_min < 0)] <- 0
+#anoph_max <- seq(0, 1, 0.1)
+#anoph_min <- anoph_max - 0.3
+#anoph_min[which(anoph_min < 0)] <- 0
 
-aegmax <- seq(0,1,0.1)
-aegmin <- aegmax - 0.5
-aegmin[which(aegmin<0)] <- 0
+#aegmax <- seq(0,1,0.1)
+#aegmin <- aegmax - 0.3
+#aegmin[which(aegmin<0)] <- 0
+
+# Sliding windows: width = `frac` of the observed range, placed at `n` positions
+# across that range. Windows overlap, so an individual falls in several.
+make_windows <- function(x, frac = 0.3, n = 11) {
+  rng   <- range(x, na.rm = TRUE)
+  width <- frac * diff(rng)
+  upper <- seq(rng[1] + width, rng[2], length.out = n)
+  data.frame(min = upper - width, max = upper)
+}
+w_fun <- make_windows(model_data$fun_pw_district)
+w_gam <- make_windows(model_data$gam_pw_district)
+w_aeg <- make_windows(model_data$aeg_pw_district)
+w_alb <- make_windows(model_data$alb_pw_district)
 
 
 df_fun_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,
   var_col = "fun_pw_district", 
   positive_col = "ONNV_pos",
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
+  breaks_max = w_fun$max, 
+  breaks_min = w_fun$min)
 
 df_gam_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,
   var_col = "gam_pw_district", 
   positive_col = "ONNV_pos",
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
+  breaks_max = w_gam$max, 
+  breaks_min = w_gam$min)
 
 
 df_aegypti_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,
   var_col = "aeg_pw_district", 
   positive_col = "ONNV_pos",
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
+  breaks_max = w_aeg$max, 
+  breaks_min = w_aeg$min)
 
 df_albopictus_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,
   var_col = "alb_pw_district", 
   positive_col = "ONNV_pos",
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
+  breaks_max = w_alb$max, 
+  breaks_min = w_alb$min)
 
 # Plot ONNV with AN. Gambia 
 prop_gam_prev <- make_plot_onnv(
@@ -102,7 +115,7 @@ prop_gam_prev <- make_plot_onnv(
 )
 
 
-ggsave("Results/fig4d.png", 
+ggsave("Results/NEW_fig4d.png", 
        plot = prop_gam_prev,
        width = 6, 
        height = 8, 
@@ -125,15 +138,17 @@ meta_data_with_labels <- meta_data_with_labels %>%
     log_pop_density = log(pop_density + 1)  # +1 to avoid log(0) issues
   )
 
-popdenmax <-seq(-1, 4.2, 0.1)
-popdenmin <-popdenmax-2
+#popdenmax <-seq(-1, 4.2, 0.1)
+#popdenmin <-popdenmax-2
+
+w_pop <- make_windows(meta_data_with_labels$log_pop_density)
 
 df_onnv_pop <- calculate_prop_by_variable(
   data = meta_data_with_labels, 
   var_col = "log_pop_density", 
   positive_col = "ONNV_pos",
-  breaks_max = popdenmax, 
-  breaks_min = popdenmin)
+  breaks_max = w_pop$max, 
+  breaks_min = w_pop$min)
 
 summary(df_onnv_pop$log_model)
 
@@ -144,33 +159,32 @@ df_fun_chik <- calculate_prop_by_variable(
   data = meta_data_with_labels,
   var_col = "fun_pw_district", 
   positive_col = "CHIK_pos",
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
+  breaks_max = w_fun$max, 
+  breaks_min = w_fun$min)
 
 # Gambiae
 df_gam_chik <- calculate_prop_by_variable(
   data = meta_data_with_labels,
   var_col = "gam_pw_district", 
   positive_col = "CHIK_pos",
-  breaks_max = anoph_max, 
-  breaks_min = anoph_min)
+  breaks_max = w_gam$max, 
+  breaks_min = w_gam$min)
 
 # Aegypti
 df_aegypti_chik <- calculate_prop_by_variable(
   data = meta_data_with_labels, 
   var_col = "aeg_pw_district", 
   positive_col = "CHIK_pos",
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
+  breaks_max = w_aeg$max, 
+  breaks_min = w_aeg$min)
 
   # Albopictus
 df_albopictus_chik <- calculate_prop_by_variable(
   data = meta_data_with_labels, 
   var_col = "alb_pw_district", 
   positive_col = "CHIK_pos",
-  breaks_max = aegmax, 
-  breaks_min = aegmin)
-
+  breaks_max = w_alb$max, 
+  breaks_min = w_alb$min)
 
 
 # beta 

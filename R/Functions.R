@@ -180,6 +180,7 @@ run_inla_multivariable <- function(year_intro, data, cam_pop, positive_col,
 }
 
 
+
 # --- Function to extract FOI (national level)
 national_foi <- function(res, cam_pop, agg_factor = 10, n = 1000) {
 
@@ -1265,6 +1266,19 @@ aggregate_predictions_by_region <- function(
   
   # --- spatial join ---
   joined <- st_join(pred_sf, regions_sf[, region_col], left = FALSE)
+
+  n_missing <- sum(is.na(joined[[region_col]]))
+  if (n_missing > 0) {
+    message(n_missing, " of ", nrow(joined),
+            " prediction points fell outside all region polygons; assigning to nearest region.")
+    if (agg_type == "sum") {
+      message("  these account for ",
+              round(100 * sum(joined[[value_col]][is.na(joined[[region_col]])], na.rm = TRUE) /
+                    sum(joined[[value_col]], na.rm = TRUE), 2), "% of the total.")
+    }
+    nr <- st_nearest_feature(joined[is.na(joined[[region_col]]), ], regions_sf)
+    joined[[region_col]][is.na(joined[[region_col]])] <- regions_sf[[region_col]][nr]
+  } 
   
   if (nrow(joined) == 0) {
     stop("No prediction points fall inside regions.")
@@ -1325,10 +1339,18 @@ calculate_prop_by_variable <- function(data, var_col, positive_col, breaks_max, 
   
   for (i in 1:length(breaks_max)) {
 
-      tmp <- which(
-      data[[var_col]] < breaks_max[i] &
-      data[[var_col]] >= breaks_min[i]
-    )
+      #tmp <- which(
+      #data[[var_col]] < breaks_max[i] &
+      #data[[var_col]] >= breaks_min[i]
+    #)
+
+     upper_ok <- if (i == length(breaks_max)) {
+      data[[var_col]] <= breaks_max[i]   # final window includes the maximum
+    } else {
+      data[[var_col]] <  breaks_max[i]
+    }
+
+    tmp <- which(data[[var_col]] >= breaks_min[i] & upper_ok)
 
 
     if (length(tmp) > 5) {
@@ -1409,6 +1431,7 @@ make_plot_onnv <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") 
     labs(x = xlab, y = ylab) +
     base_theme +
     theme(
+      axis.title.x = ggtext::element_markdown(halign = 0.5),
       plot.margin = margin(t = 10, r = 14, b = 12, l = 14)
     )
 
@@ -1461,6 +1484,7 @@ make_plot_chik <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") 
     labs(x = xlab, y = ylab) +
     base_theme +
     theme(
+      axis.title.x = ggtext::element_markdown(halign = 0.5),
       plot.margin = margin(t = 10, r = 14, b = 12, l = 14)
     )
 

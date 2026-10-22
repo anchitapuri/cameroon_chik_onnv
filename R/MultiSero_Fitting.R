@@ -39,6 +39,9 @@ mod = cmdstan_model(model_path, pedantic = FALSE, force_recompile = TRUE)
 meta_data <- readRDS(here('Results/meta_data_clean_without_coords.rds'))
 nrow(meta_data)
 
+
+
+
 # This is used for the onnv samples modle 
 # this is to check that removing the 920 NA chik samples doesnt change results 
 meta_data_without_coords_supp_materials <- readRDS('Results/meta_data_without_coords_supp_materials.rds')
@@ -48,7 +51,7 @@ meta_data_chik_onnv_model <- meta_data %>%
   drop_na(CHIKV_sE2, MAYV_E2, ONNV_VLP) %>%
   mutate(stan_idx_full_model = row_number()) 
 nrow(meta_data_chik_onnv_model)
-colnames(meta_data_chik_onnv_model)
+
 
 # Number of samples per year (that the model was run on)
 meta_data_chik_onnv_model %>%
@@ -135,7 +138,7 @@ fit_full_model <- mod$sample(
 )
 
 
-fit_chik_model <- mod_final$sample(
+fit_chik_model <- mod$sample(
   data = preprocessed_data_chik_model$data, 
   chains = 3, 
   iter_sampling = 3000, 
@@ -147,7 +150,7 @@ fit_chik_model <- mod_final$sample(
 )
 
 
-fit_onnv_model <- mod_final$sample(
+fit_onnv_model <- mod$sample(
   data = preprocessed_data_onnv_model$data, 
   chains = 3, 
   iter_sampling = 3000, 
@@ -159,7 +162,7 @@ fit_onnv_model <- mod_final$sample(
 )
 
 
-fit_onnv_samples_model <- mod_final$sample(
+fit_onnv_samples_model <- mod$sample(
   data = preprocessed_data_onnv_samples_model$data, 
   chains = 3, 
   iter_sampling = 3000, 
@@ -176,12 +179,15 @@ fit_onnv_samples_model <- mod_final$sample(
 fit_full_model$save_object(here('Results/full_model_fits.rds'))
 fit_chik_model$save_object(here('Results/chik_model_fits.rds'))
 fit_onnv_model$save_object(here('Results/onnv_model_fits.rds'))
+fit_onnv_samples_model$save_object(here('Results/fit_onnv_samples_model.rds'))
 
 # Read RDS files
 fit_full_model <- readRDS(here('Results/full_model_fits.rds'))
 fit_chik_model <- readRDS(here('Results/chik_model_fits.rds'))
 fit_onnv_model <- readRDS(here('Results/onnv_model_fits.rds'))
 
+mean(preprocessed_data_full_model$data$y$CHIKV_sE2_log)
+mean(preprocessed_data_full_model$data$y$ONNV_VLP_log)
 
 # extract chains
 chains_full <- fit_full_model$draws(format='df')
@@ -194,7 +200,7 @@ chains_df_chik <- as.data.frame(chains_chik)
 chains_onnv <- fit_onnv_model$draws(format='df')
 chains_df_onnv <- as.data.frame(chains_onnv)
 
-
+quartz()
 # Plot trace plots with all chains clearly visible
 color_scheme_set("mix-blue-red")
 p1 <- mcmc_trace(fit_full_model$draws(c("seroAll", "lp__")))
@@ -213,7 +219,7 @@ sero <- extract_sero(chains_df_full, preprocessed_data_full_model$data, pathogen
 sds <- extract_sd(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
 
 print(sero)
-
+print(mu)
 # cross reactive titre incease 
 p_CR <- plot_titer_increases_comparison(phi$phi, mu$mus1)
 p_CR$plot_data
@@ -222,6 +228,12 @@ print(p_CR)
 # cross reactive titre increase MAYYV
 p_CR_mayv <- titer_increases_comparison_mayv(phi$phi, mu$mus1)
 print(p_CR_mayv)
+
+#plot CR 
+p_CR <- plot_titre_responses(mu)
+
+p_CR
+
 
 # --- Cluster assignment based on max probability - For INLA analysis 
 N  <- preprocessed_data_full_model$data$N

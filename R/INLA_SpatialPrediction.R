@@ -33,14 +33,20 @@ library(ggspatial)
 source(here('R/Functions.R'))
 
 # Population and mosquito rasts
-anopheles_funestus <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_funestus_CMR.tiff')
-anopheles_gambiae <- rast('/Users/ap2488/Desktop/Cameroon_Analysis_2025/2010_Anopheles_gambiae_ss_CMR.tiff')
-cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
+# Load mosquito maps
+data_dir <- 'Data'
+aegypti <- rast(here(data_dir, 'Aedes_maps_public', 'aegypti.tif'))
+albopictus <- rast(here(data_dir, 'Aedes_maps_public', 'albopictus.tif'))
+anopheles_funestus <- rast(here(data_dir, '2010_Anopheles_funestus_CMR.tiff'))
+anopheles_gambiae <- rast(here(data_dir, '2010_Anopheles_gambiae_ss_CMR.tiff'))
+
+
+cam_pop <- rast(here(data_dir, 'cmr_ppp_2020_UNadj.tif'))
 sum(values(cam_pop), na.rm = TRUE)
 cam_pop_agg <- terra::aggregate(cam_pop, fact = 10, fun = sum, na.rm = TRUE) # (~1 km, from aggregating the ~100 m WorldPop grid by a factor of 10)".
 
 # Cameroon population by age
-cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/CameroonAge2025.csv')
+cameroon_age_2025 <- read.csv(here(data_dir, 'CameroonAge2025.csv'))
 cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
 
@@ -62,6 +68,7 @@ if (grepl("\\+", age_groups$age_string[nrow(age_groups)])) {
   age_groups$age_lower[nrow(age_groups)] <- as.numeric(sub("\\+", "", age_groups$age_string[nrow(age_groups)]))
   age_groups$age_upper[nrow(age_groups)] <- 120  # or whatever max age you want
 }
+
 
 
 # ----- Read preprocessed data with coords 
@@ -147,9 +154,12 @@ all(meta_data_with_labels$Sample == meta_data_with_coords$Sample) # same rows, s
 # Rename
 model_data <- meta_data_with_labels
 model_data_onnv_samples <- meta_data_onnv_samples
+write.csv(model_data, here('Results/model_data.csv'), row.names = FALSE)
+
 
 mean(model_data$AgeInYears)
 table(model_data$Sex)
+
 
 # Check for missing data / NA
 sum(is.na(model_data$AgeInYears))
@@ -297,6 +307,7 @@ ns_spatial <- national_metrics_summary(onnv_results_pop_grid, cam_pop, age_group
 # save national summary
 saveRDS(ns_spatial, here('Results/national_summary_spatial.rds'))
 
+ns_spatial <- readRDS(here('Results/national_summary_spatial.rds'))
 # print
 ns_spatial$foi
 ns_spatial$seroprev
@@ -342,6 +353,8 @@ infections_onnv <- predicted_annual_infections(
   pathogen_name = "ONNV"
 )
 
+
+
 # By Region
 cameroon_regions <- ne_states(country = "Cameroon", returnclass = "sf")
 # rename 'name' to region
@@ -369,15 +382,17 @@ prev_region <- aggregate_predictions_by_region(
   agg_type   = "weighted_mean"
 )
 print(prev_region)
-
+ 
 infection_region <- aggregate_predictions_by_region(
   pred_sf    = infections_onnv$infections_sf,
   regions_sf = regions_sf,
   value_col  = "infections",
   agg_type   = "sum"
 )
-print(infection_region)
 
+print(infection_region)
+print(infection_region$region)
+sum(infection_region$value_weighted)
 
 # save region level predictions
 region_level_predictions <- list(
@@ -386,8 +401,10 @@ region_level_predictions <- list(
   infections = infection_region
 )
 saveRDS(region_level_predictions, here('Results/region_level_predictions.rds'))
-print(region_level_predictions)
+region_level_predictions <- readRDS('Results/region_level_predictions.rds')
 
+
+View(region_level_predictions)
 
 
 # ---  prob of disease,  acute cases, arthralgic cases and  deaths per year occur in Cameroon each year

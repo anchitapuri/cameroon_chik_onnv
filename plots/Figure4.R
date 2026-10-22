@@ -144,9 +144,9 @@ ggsave(here('Results/fig4f.png'),
 
 
 # Proportion of Anopheles positive vs proportion of ONNV positive
-anoph_max <- seq(0, 1, 0.1)
-anoph_min <- anoph_max - 0.5
-anoph_min[which(anoph_min < 0)] <- 0
+#anoph_max <- seq(0, 1, 0.1)
+#anoph_min <- anoph_max - 0.5
+#anoph_min[which(anoph_min < 0)] <- 0
 
 # Proportion of Anopheles positive vs proportion of ONNV positive
 anoph_max <- seq(0, 1, 0.1)
