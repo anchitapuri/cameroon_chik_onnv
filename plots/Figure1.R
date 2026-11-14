@@ -1,6 +1,6 @@
 
 # Load population by gender / age data 
-cameroon_age_2025 <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/CameroonAge2025.csv')
+cameroon_age_2025 <- read.csv(here('Data/CameroonAge2025.csv'))
 cameroon_age_2025 <- cameroon_age_2025 %>%
   mutate(total = M + F)
 
@@ -19,8 +19,8 @@ nrow(preprocessed_data_full_model$data$y) #5272
 
 
 # Load population rasters
-cam_pop <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_ppp_2020_UNadj.tif")
-cam_pop_den <- rast("/Users/ap2488/Desktop/Cameroon_Analysis_2025/cmr_pd_2020_1km_UNadj.tif")
+cam_pop <- rast(here("Data/cmr_ppp_2020_UNadj.tif"))
+cam_pop_den <- rast(here("Data/cmr_pd_2020_1km_UNadj.tif"))
 
 
 # --- Figure 1 ----
@@ -98,7 +98,7 @@ fig1a_with_inset <- fig1a +
 print(fig1a_with_inset)
 
 # --- Save Figure 1a
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1a.png", 
+ggsave(here("Results/fig1a.png"), 
        plot = fig1a_with_inset,  
        width = 10, 
        height = 10, 
@@ -133,7 +133,7 @@ fig1b <- meta_data_clean %>%
   )
 
 print(fig1b)
-ggsave("/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/fig1b.png", 
+ggsave(here("Results/fig1b.png"), 
        plot = fig1b,    # swap this for your actual plot object name
        width = 7, 
        height = 10, 

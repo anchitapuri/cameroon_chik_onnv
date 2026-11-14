@@ -1252,81 +1252,77 @@ plot_age_seroprevalence_obs_only_by_gender <- function(data, model_data, chains_
 aggregate_predictions_by_region <- function(
   pred_sf,
   regions_sf,
-  cam_pop = NULL,
   value_col,
   region_col = "region",
-  agg_type = c("weighted_mean", "sum")
+  agg_type   = c("weighted_mean", "sum"),
+  pop_col    = "population"     # population column already on pred_sf (same grid as predictions)
 ) {
-  
+  agg_type <- match.arg(agg_type)
 
   # --- CRS alignment ---
-  if (st_crs(pred_sf) != st_crs(regions_sf)) {
-    regions_sf <- st_transform(regions_sf, st_crs(pred_sf))
+  if (sf::st_crs(pred_sf) != sf::st_crs(regions_sf)) {
+    regions_sf <- sf::st_transform(regions_sf, sf::st_crs(pred_sf))
   }
-  
-  # --- spatial join ---
-  joined <- st_join(pred_sf, regions_sf[, region_col], left = FALSE)
 
-  n_missing <- sum(is.na(joined[[region_col]]))
-  if (n_missing > 0) {
-    message(n_missing, " of ", nrow(joined),
-            " prediction points fell outside all region polygons; assigning to nearest region.")
-    if (agg_type == "sum") {
-      message("  these account for ",
-              round(100 * sum(joined[[value_col]][is.na(joined[[region_col]])], na.rm = TRUE) /
-                    sum(joined[[value_col]], na.rm = TRUE), 2), "% of the total.")
-    }
-    nr <- st_nearest_feature(joined[is.na(joined[[region_col]]), ], regions_sf)
-    joined[[region_col]][is.na(joined[[region_col]])] <- regions_sf[[region_col]][nr]
-  } 
-  
-  if (nrow(joined) == 0) {
-    stop("No prediction points fall inside regions.")
+  n_in  <- nrow(pred_sf)
+  total_in <- sum(pred_sf[[value_col]], na.rm = TRUE)
+  pred_sf$.pid <- seq_len(n_in)
+
+  # --- spatial join (keep all points) ---
+  joined <- sf::st_join(pred_sf, regions_sf[, region_col], left = TRUE)
+
+  # boundary points matching >1 polygon -> keep first match
+  dup <- duplicated(joined$.pid)
+  if (any(dup)) {
+    message(sum(dup), " points matched more than one region; keeping first match.")
+    joined <- joined[!dup, ]
   }
-  
+
+  # points outside all polygons -> nearest region
+  miss <- is.na(joined[[region_col]])
+  if (any(miss)) {
+    message(sum(miss), " of ", n_in,
+            " points fell outside all regions; assigning to nearest region (",
+            round(100 * sum(joined[[value_col]][miss], na.rm = TRUE) / total_in, 2),
+            "% of total value).")
+    nr <- sf::st_nearest_feature(joined[miss, ], regions_sf)
+    joined[[region_col]][miss] <- regions_sf[[region_col]][nr]
+  }
+
+  stopifnot(nrow(joined) == n_in)
+
+  n_na <- sum(is.na(joined[[value_col]]))
+  if (n_na > 0) message(n_na, " points have NA in ", value_col, " and are ignored.")
+
+  joined <- sf::st_drop_geometry(joined)   # faster summarise, avoids MULTIPOINT output
+
   if (agg_type == "weighted_mean") {
-    
-    if (is.null(cam_pop)) {
-      stop("cam_pop raster required for weighted_mean aggregation")
-    }
-    
-    joined$population <- terra::extract(
-      cam_pop,
-      terra::vect(joined))[,2]
-    
-    # remove missing population
-    joined <- joined[!is.na(joined$population) & joined$population > 0, ]
-    
-    # --- weighted aggregation ---
-    out <- joined %>%
-      dplyr::group_by(.data[[region_col]]) %>%
+    if (!pop_col %in% names(joined)) stop("pop_col '", pop_col, "' not found in pred_sf")
+    joined <- joined[!is.na(joined[[pop_col]]) & joined[[pop_col]] > 0, ]
+
+    out <- joined |>
+      dplyr::group_by(.data[[region_col]]) |>
       dplyr::summarise(
-        value_weighted = weighted.mean(
-          .data[[value_col]],
-          population,
-          na.rm = TRUE
-        ),
+        value_weighted   = weighted.mean(.data[[value_col]], .data[[pop_col]], na.rm = TRUE),
         value_unweighted = mean(.data[[value_col]], na.rm = TRUE),
-        total_population = sum(population, na.rm = TRUE),
-        n_points = dplyr::n(),
+        total_population = sum(.data[[pop_col]]),
+        n_points         = dplyr::n(),
         .groups = "drop"
       )
-    
   } else {
-    
-    # --- sum aggregation (for infections) ---
-    out <- joined %>%
-      dplyr::group_by(.data[[region_col]]) %>%
+    out <- joined |>
+      dplyr::group_by(.data[[region_col]]) |>
       dplyr::summarise(
         total_value = sum(.data[[value_col]], na.rm = TRUE),
-        n_points = dplyr::n(),
+        n_points    = dplyr::n(),
         .groups = "drop"
       )
+    message("Sum of regions: ", round(sum(out$total_value)),
+            " | input total: ", round(total_in))
   }
-  
-  return(out)
-}
 
+  out
+}
 
 
 # --- Propotion by mosquito distribution + log population (using binary serostatus)

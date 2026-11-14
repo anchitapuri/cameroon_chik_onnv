@@ -29,7 +29,6 @@ source(here('R/Functions.R'))
 data_dir <- 'Data'
 meta_data <- read.csv(here(data_dir, 'MFI_meta.csv'))
 head(meta_data)
-                   
 
 # shapefile #1
 cam_shapefile_districts <- read_sf(here(data_dir, 'S4_Cameroon_health_districts_files/Caedistricts179_region.shp'))

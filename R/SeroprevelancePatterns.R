@@ -113,6 +113,7 @@ prop_gam_prev <- make_plot_onnv(
   "Suitability Anopheles gambiae",
   color ="#165262", pos_col =  "ONNV_pos"
 )
+print(prop_gam_prev)
 
 
 ggsave("Results/NEW_fig4d.png", 
@@ -129,6 +130,13 @@ print(summary(df_fun_binary$log_model))
 print(summary(df_gam_binary$log_model))
 print(summary(df_aegypti_binary$log_model))
 print(summary(df_albopictus_binary$log_model))
+
+# extract p values 
+log_models <- list(fun = df_fun_binary$log_model, gam = df_gam_binary$log_model,
+               aeg = df_aegypti_binary$log_model, alb = df_albopictus_binary$log_model)
+sapply(log_models, function(m) coef(summary(m))[2, "Pr(>|z|)"])
+
+
 
 # ---ONNV with population density 
 
@@ -235,6 +243,7 @@ chik_in_cities <- chik_pos %>%
 
 # 3. Calculate the proportion
 total_cases    <- sum(chik_pos$n)
+print(total_cases)
 cases_in_cities <- sum(chik_in_cities$n)
 prop <- cases_in_cities / total_cases * 100
 print(prop)

@@ -27,7 +27,11 @@ library(posterior)
 library(brms)
 library(tidybayes)
 
+# Clear conda's settings FIRST, before loading cmdstanr
+Sys.unsetenv(c("CMDSTAN", "CXX", "CC", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "CFLAGS"))
+library(cmdstanr)
 
+packageVersion("cmdstanr")
 source(here('R/MultiSeroFunctions.R'))
 source(here('R/Functions.R'))
 
@@ -120,6 +124,11 @@ saveRDS(preprocessed_data_chik_model, here('Results/preprocessed_data_chik_model
 saveRDS(preprocessed_data_onnv_model, here('Results/preprocessed_data_onnv_model.rds'))
 saveRDS(preprocessed_data_onnv_samples_model, here('Results/preprocessed_data_onnv_samples_model.rds'))
 
+preprocessed_data_full_model <- readRDS(here('Results/preprocessed_data_full_model.rds'))
+preprocessed_data_chik_model <- readRDS(here('Results/preprocessed_data_chik_model.rds'))
+preprocessed_data_onnv_model <- readRDS(here('Results/preprocessed_data_onnv_model.rds'))
+preprocessed_data_onnv_samples_model <- readRDS(here('Results/preprocessed_data_onnv_samples_model.rds'))
+
 #--- Fit full model 
 ini_full <- init(preprocessed_data_full_model$data, nChains = 3)
 ini_chik <- init(preprocessed_data_chik_model$data, nChains = 3)
@@ -185,6 +194,7 @@ fit_onnv_samples_model$save_object(here('Results/fit_onnv_samples_model.rds'))
 fit_full_model <- readRDS(here('Results/full_model_fits.rds'))
 fit_chik_model <- readRDS(here('Results/chik_model_fits.rds'))
 fit_onnv_model <- readRDS(here('Results/onnv_model_fits.rds'))
+fit_onnv_samples_model <- readRDS(here('Results/fit_onnv_samples_model.rds'))
 
 mean(preprocessed_data_full_model$data$y$CHIKV_sE2_log)
 mean(preprocessed_data_full_model$data$y$ONNV_VLP_log)
@@ -196,9 +206,12 @@ chains_df_full <- as.data.frame(chains_full)
 chains_chik <- fit_chik_model$draws(format='df')
 chains_df_chik <- as.data.frame(chains_chik)
 
-
 chains_onnv <- fit_onnv_model$draws(format='df')
 chains_df_onnv <- as.data.frame(chains_onnv)
+
+chains_onnv_samples <- fit_onnv_samples_model$draws(format='df')
+chains_df_onnv_samples <- as.data.frame(chains_onnv_samples)
+
 
 quartz()
 # Plot trace plots with all chains clearly visible
@@ -214,9 +227,23 @@ print(p1 + p2 + p3 + p4)
 # Save posterior estimates from full model
 # extract posterior estimates
 phi <- extract_phi(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
+print(phi)
 mu <- extract_mu(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
+print(mu)
 sero <- extract_sero(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
+print(sero)
 sds <- extract_sd(chains_df_full, preprocessed_data_full_model$data, pathogens=preprocessed_data_full_model$pathogens)
+
+
+
+# posterior estimates onnv samples model 
+phi_onnv_samples <- extract_phi(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, pathogens=preprocessed_data_onnv_samples_model$pathogens)
+print(phi_onnv_samples)
+mu_onnv_samples <- extract_mu(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, pathogens=preprocessed_data_onnv_samples_model$pathogens)
+print(mu_onnv_samples)
+sero_onnv_samples <- extract_sero(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, pathogens=preprocessed_data_onnv_samples_model$pathogens)
+print(sero_onnv_samples)
+sds_onnv_samples <- extract_sd(chains_df_onnv_samples, preprocessed_data_onnv_samples_model$data, pathogens=preprocessed_data_onnv_samples_model$pathogens)
 
 print(sero)
 print(mu)

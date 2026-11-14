@@ -70,6 +70,14 @@ if (grepl("\\+", age_groups$age_string[nrow(age_groups)])) {
 }
 
 
+# regions for foi, prev and infections stratified by region
+cameroon_regions <- ne_states(country = "Cameroon", returnclass = "sf")
+# rename 'name' to region
+regions_sf <- cameroon_regions %>%
+  dplyr::select(region = name) %>%   # standardise column name
+  st_make_valid()
+
+
 
 # ----- Read preprocessed data with coords 
 meta_data_with_coords <- readRDS(here('Results/meta_data_clean_with_coords.rds'))
@@ -156,7 +164,7 @@ model_data <- meta_data_with_labels
 model_data_onnv_samples <- meta_data_onnv_samples
 write.csv(model_data, here('Results/model_data.csv'), row.names = FALSE)
 
-
+model_data <- read.csv(here('Results/model_data.csv'))
 mean(model_data$AgeInYears)
 table(model_data$Sex)
 
@@ -240,10 +248,13 @@ national_foi_onnv_samples   <- national_foi(onnv_results_pop_grid_onnv_samples, 
 national_foi_mv <- national_foi_covars(onnv_results_pop_grid_multivariable, cam_pop,
                                        covar_grid = covar_grid)
 
+                                 
+
 # save 
 saveRDS(national_foi_spatial, here('Results/national_foi_spatial.rds'))
 saveRDS(national_foi_mv, here('Results/national_foi_mv.rds'))
 saveRDS(national_foi_onnv_samples, here('Results/national_foi_onnv_samples.rds'))
+
 
 
 national_foi_spatial <- readRDS(here('Results/national_foi_spatial.rds'))
@@ -256,25 +267,36 @@ national_foi_mv[c("mean","ciL","ciU")]
 national_foi_onnv_samples[c("mean","ciL","ciU")] 
 
 
- 
-# -- additional national metrics - FOI, seroprevalence, infections, susceptible proportion
-national_metrics_summary <- function(res, cam_pop, age_groups, w_age,
-                             agg_factor = 10, n = 1000, seed = 1) {
-  set.seed(seed)
-  stopifnot(length(w_age) == nrow(age_groups))       # guard: weights must match age groups
+assign_regions <- function(coop, regions_sf, region_col = "region", crs = 4326) {
+  pts <- sf::st_as_sf(as.data.frame(coop), coords = 1:2, crs = crs)
+  regions_sf <- sf::st_transform(regions_sf, crs)
+  hit   <- sf::st_intersects(pts, regions_sf)
+  first <- vapply(hit, function(i) if (length(i)) i[1] else NA_integer_, integer(1))
+  miss  <- is.na(first)
+  if (any(miss)) {
+    message(sum(miss), " cells outside all polygons; assigned to nearest region.")
+    first[miss] <- sf::st_nearest_feature(pts[miss, ], regions_sf)
+  }
+  regions_sf[[region_col]][first]
+}
 
-  # per-cell population aligned to res$coop
+cell_region <- assign_regions(onnv_results_pop_grid$coop, regions_sf, "region")
+
+national_metrics_summary_new <- function(res, cam_pop, age_groups, w_age,
+                                     cell_region = NULL,
+                                     agg_factor = 10, n = 1000, seed = 1) {
+  set.seed(seed)
+  stopifnot(length(w_age) == nrow(age_groups))
+
   cam_pop_agg <- terra::aggregate(cam_pop, fact = agg_factor, fun = sum, na.rm = TRUE)
   pop <- as.data.frame(terra::as.points(cam_pop_agg, values = TRUE, na.rm = TRUE))[, 1]
   stopifnot(length(pop) == nrow(res$coop))
   ok <- !is.na(pop); pop <- pop[ok]; w <- pop / sum(pop)
 
-  # sample Intercept + spatial.field 
   sel   <- list(Intercept = 1, spatial.field = seq_len(res$mesh$n))
   samp  <- inla.posterior.sample(n, res$output, selection = sel)
   Ap_ok <- inla.spde.make.A(mesh = res$mesh, loc = as.matrix(res$coop))[ok, , drop = FALSE]
 
-  # age-averaged susceptible proportion for a vector of FOIs
   L <- age_groups$age_lower; U <- age_groups$age_upper; dW <- U - L
   suscept <- function(lam) {
     s <- sapply(seq_along(L), function(j)
@@ -282,7 +304,20 @@ national_metrics_summary <- function(res, cam_pop, age_groups, w_age,
     as.numeric(s %*% w_age)
   }
 
-  # loop over draws — no giant matrix
+  # --- regional setup ---
+  do_reg <- !is.null(cell_region)
+  if (do_reg) {
+    stopifnot(length(cell_region) == nrow(res$coop))
+    grp     <- factor(cell_region[ok])
+    gi      <- as.integer(grp)
+    reg_pop <- as.numeric(rowsum(pop, gi))
+    reg_foi <- reg_sero <- reg_inf <-
+      matrix(NA_real_, nlevels(grp), n, dimnames = list(levels(grp), NULL))
+  }
+
+  # running sums for per-cell posterior means
+  cell_foi <- cell_sero <- cell_inf <- numeric(length(pop))
+
   foi_n <- seroprev_n <- infect_n <- numeric(n)
   for (d in seq_len(n)) {
     lat <- samp[[d]]$latent
@@ -290,20 +325,52 @@ national_metrics_summary <- function(res, cam_pop, age_groups, w_age,
     fld <- lat[grep("^spatial.field", rownames(lat)), 1]
     lam <- exp(b0 + as.numeric(Ap_ok %*% fld))
     S   <- suscept(lam)
+    inf <- pop * lam * S
+
     foi_n[d]      <- sum(w * lam)
     seroprev_n[d] <- sum(w * (1 - S))
-    infect_n[d]   <- sum(pop * lam * S)
+    infect_n[d]   <- sum(inf)
+
+    cell_foi  <- cell_foi  + lam
+    cell_sero <- cell_sero + (1 - S)
+    cell_inf  <- cell_inf  + inf
+
+    if (do_reg) {
+      reg_foi[, d]  <- rowsum(pop * lam,     gi)[, 1] / reg_pop
+      reg_sero[, d] <- rowsum(pop * (1 - S), gi)[, 1] / reg_pop
+      reg_inf[, d]  <- rowsum(inf,           gi)[, 1]
+    }
   }
 
   summ <- function(x) c(mean = mean(x),
-                        ciL = unname(quantile(x, 0.025)),
-                        ciU = unname(quantile(x, 0.975)))
-  list(foi = summ(foi_n), seroprev = summ(seroprev_n),
-       infections = summ(infect_n), pop_covered = sum(pop))
-}
+                        ciL  = unname(quantile(x, 0.025)),
+                        ciU  = unname(quantile(x, 0.975)))
+  summ_rows <- function(m) {
+    out <- t(apply(m, 1, summ))
+    data.frame(region = rownames(m), out, row.names = NULL)
+  }
 
-ns_spatial <- national_metrics_summary(onnv_results_pop_grid, cam_pop, age_groups, w_age, n = 1000)
+  out <- list(
+    foi = summ(foi_n), seroprev = summ(seroprev_n),
+    infections = summ(infect_n), pop_covered = sum(pop),
+    cells = data.frame(res$coop[ok, , drop = FALSE], population = pop,
+                       foi = cell_foi / n, seroprev = cell_sero / n,
+                       infections = cell_inf / n)
+  )
 
+  if (do_reg) {
+    stopifnot(isTRUE(all.equal(colSums(reg_inf), infect_n)))   # regions add to nation, per draw
+    out$regional <- list(
+      foi        = summ_rows(reg_foi),
+      seroprev   = summ_rows(reg_sero),
+      infections = summ_rows(reg_inf),
+      population = data.frame(region = levels(grp), population = reg_pop)
+    )
+  }
+  out
+} 
+
+ns_spatial <- national_metrics_summary_new(onnv_results_pop_grid, cam_pop, age_groups, w_age, n = 1000, cell_region = cell_region)
 # save national summary
 saveRDS(ns_spatial, here('Results/national_summary_spatial.rds'))
 
@@ -333,7 +400,18 @@ cat(sprintf(
   ns_spatial$seroprev[['ciU']]  * 100
 ))
 
+# By region
+reg <- ns_spatial$regional
+region_table <- reg$population |>
+  left_join(rename_with(reg$foi,        ~ paste0("foi_", .x),  -region), by = "region") |>
+  left_join(rename_with(reg$seroprev,   ~ paste0("sero_", .x), -region), by = "region") |>
+  left_join(rename_with(reg$infections, ~ paste0("inf_", .x),  -region), by = "region")
 
+
+means_table <- region_table |>
+  dplyr::select(region, population, foi_mean, sero_mean, inf_mean)
+
+write.csv(means_table, here('Results/inla_pred_by_region.csv'), row.names = FALSE)
 
 # Cameroon wide prediction (maps + regional foi estimates)
 foi_onnv <- predicted_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
@@ -355,12 +433,8 @@ infections_onnv <- predicted_annual_infections(
 
 
 
-# By Region
-cameroon_regions <- ne_states(country = "Cameroon", returnclass = "sf")
-# rename 'name' to region
-regions_sf <- cameroon_regions %>%
-  dplyr::select(region = name) %>%   # standardise column name
-  st_make_valid()
+
+
 
 # same aggregation as used for model fitting (10x10 km)
 cam_pop_agg <- terra::aggregate(cam_pop, fact = 10, fun = sum, na.rm = TRUE)
@@ -368,7 +442,6 @@ cam_pop_agg <- terra::aggregate(cam_pop, fact = 10, fun = sum, na.rm = TRUE)
 foi_region <- aggregate_predictions_by_region(
   pred_sf   = foi_onnv$foi_sf,
   regions_sf = regions_sf,
-  cam_pop   = cam_pop_agg,
   value_col = "foi",
   agg_type  = "weighted_mean"
 )
@@ -404,7 +477,12 @@ saveRDS(region_level_predictions, here('Results/region_level_predictions.rds'))
 region_level_predictions <- readRDS('Results/region_level_predictions.rds')
 
 
-View(region_level_predictions)
+sum(infection_region$total_value)              # ~299,556
+sum(infection_region$n_points)                 # 542,883
+nrow(infections_onnv$infections_sf)                                  # if larger -> points dropped by the join
+sum(infections_onnv$infections_sf$infections, na.rm = TRUE)        # should be ~307,924
+sum(is.na(infections_onnv$infections_sf$infections))               # NAs being dropped?
+
 
 
 # ---  prob of disease,  acute cases, arthralgic cases and  deaths per year occur in Cameroon each year

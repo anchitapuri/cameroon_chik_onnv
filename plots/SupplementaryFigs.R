@@ -75,7 +75,7 @@ ggsave(here("Results/supplementary_fig1.png"),
 # Anopheles and Aedes bins (adjust if needed based on your data range
 #anoph_max <- seq(0, 1, 0.1)
 #anoph_min <- anoph_max - 0.3
-anoph_min[which(anoph_min < 0)] <- 0
+#anoph_min[which(anoph_min < 0)] <- 0
 
 #aegmax <- seq(0,1,0.1)
 #aegmin <- aegmax - 0.3
@@ -109,7 +109,6 @@ df_gam_binary <- calculate_prop_by_variable (
   breaks_max = w_gam$max, 
   breaks_min = w_gam$min)
 
-summary(df_gam_binary$log_model) 
 
 df_aegypti_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,

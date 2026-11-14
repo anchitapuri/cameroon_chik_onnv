@@ -47,7 +47,7 @@ distfits <- plot_fits(chains_df_full, preprocessed_data_full_model$data, pathoge
 distfits$fitPN 
 print(distfits$fitPN)
 ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2a.png',
+  filename = here("Results/Fig2a.png"),
   plot = distfits$fitPN,
   width = 10,
   height = 8,
@@ -66,7 +66,7 @@ p_CR <- plot_titre_responses(mu)
 print(p_CR)
 
 ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2c.png',
+  filename = here("Results/Fig2c.png"),
   plot = p_CR$p,
   width = 12,
   height = 10,
@@ -81,7 +81,7 @@ print(p_sero)
 
 
 ggsave(
-  filename = '/Users/ap2488/Desktop/Cameroon_Analysis_2025/FinalCode/Fig2d.png',
+  filename = here("Results/Fig2d.png"),
   plot = p_sero,
   width = 12,
   height = 10,
