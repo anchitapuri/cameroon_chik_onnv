@@ -79,6 +79,7 @@ regions_sf <- cameroon_regions %>%
 
 
 
+
 # ----- Read preprocessed data with coords 
 meta_data_with_coords <- readRDS(here('Results/meta_data_clean_with_coords.rds'))
 colnames(meta_data_with_coords)
@@ -109,8 +110,6 @@ nrow(meta_data_with_coords_supp_materials)
 meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
 colnames(meta_data_with_labels)
 nrow(meta_data_with_labels)
-
-unique(meta_data_with_labels$year_of_survey)
 
 
 meta_data_onnv_samples <- read.csv(here('Results/meta_data_onnv_samples_with_labels.csv'))
@@ -192,78 +191,34 @@ onnv_results_pop_grid_onnv_samples <- run_inla(
   positive_col = "ONNV_pos")
 
 
-# --- Run INLA model with covariates - An. Gam and log pop density
-# extract covariates for each grid cell
-cam_pop_agg <- terra::aggregate(cam_pop, fact = 10, fun = sum, na.rm = TRUE)   # ~1 km cells
-dens_agg    <- cam_pop_agg / terra::cellSize(cam_pop_agg, unit = "km")         # people / km²
-
-# Covariates at observation points for fitting
-obs_pts <- terra::vect(model_data, geom = c("Longitude","Latitude"), crs = "EPSG:4326")
-
-model_data$gam_ras      <- terra::extract(anopheles_gambiae, obs_pts)[, 2] # [,2] = values, [,1] = ID
-model_data$log_dens_ras <- log(terra::extract(dens_agg,      obs_pts)[, 2] + 1)
-
-# Covariates at prediction grid points -> for the MAP ---------------
-# align with coop (prediction grid)
-grid_pts <- terra::as.points(cam_pop_agg, values = TRUE, na.rm = TRUE)
-
-covar_grid <- data.frame(
-  gam_ras      = terra::extract(anopheles_gambiae, grid_pts)[, 2],
-  log_dens_ras = log(terra::extract(dens_agg,      grid_pts)[, 2] + 1)
-)
-
-# fill any grid NAs (cells where a raster has no data) so INLA give error
-covar_grid$gam_ras[is.na(covar_grid$gam_ras)]  <- mean(covar_grid$gam_ras, na.rm = TRUE)
-covar_grid$log_dens_ras[is.na(covar_grid$log_dens_ras)] <- mean(covar_grid$log_dens_ras, na.rm = TRUE)
-
-sum(is.na(covar_grid$gam_ras))         # should be 0
-sum(is.na(covar_grid$log_dens_ras))    # should be 0
-
-
-onnv_results_pop_grid_multivariable <- run_inla_multivariable(
-  year_intro   = 1900,
-  data         = model_data,
-  cam_pop      = cam_pop,
-  positive_col = "ONNV_pos",
-  covars       = c("gam_ras", "log_dens_ras"),
-  covar_grid   = covar_grid
-) 
 
 
 # save results 
 # --- Save prediction results 
 saveRDS(onnv_results_pop_grid, here('Results/ONNV_INLAResults.rds'))
 saveRDS(onnv_results_pop_grid_onnv_samples, here('Results/ONNV_INLAResults_ONNV_samples.rds'))
-saveRDS(onnv_results_pop_grid_multivariable, here('Results/ONNV_INLAResults_multivariable.rds'))
 
 # Read saved results
 onnv_results_pop_grid <- readRDS(here('Results/ONNV_INLAResults.rds'))
 onnv_results_pop_grid_onnv_samples <- readRDS(here('Results/ONNV_INLAResults_ONNV_samples.rds'))
-onnv_results_pop_grid_multivariable <- readRDS(here('Results/ONNV_INLAResults_multivariable.rds'))
 
 
 # Cameroon wide estimates (FOI, seroprevalence, infections) using the posterior samples from the INLA model + pop weighted 
 national_foi_spatial <- national_foi(onnv_results_pop_grid, cam_pop)
 national_foi_onnv_samples   <- national_foi(onnv_results_pop_grid_onnv_samples, cam_pop)
-national_foi_mv <- national_foi_covars(onnv_results_pop_grid_multivariable, cam_pop,
-                                       covar_grid = covar_grid)
 
                                  
 
 # save 
 saveRDS(national_foi_spatial, here('Results/national_foi_spatial.rds'))
-saveRDS(national_foi_mv, here('Results/national_foi_mv.rds'))
 saveRDS(national_foi_onnv_samples, here('Results/national_foi_onnv_samples.rds'))
 
 
-
 national_foi_spatial <- readRDS(here('Results/national_foi_spatial.rds'))
-national_foi_mv <- readRDS(here('Results/national_foi_mv.rds'))
 national_foi_onnv_samples <- readRDS(here('Results/national_foi_onnv_samples.rds'))
 
 # print values 
 national_foi_spatial[c("mean","ciL","ciU")] 
-national_foi_mv[c("mean","ciL","ciU")] 
 national_foi_onnv_samples[c("mean","ciL","ciU")] 
 
 
@@ -280,101 +235,102 @@ assign_regions <- function(coop, regions_sf, region_col = "region", crs = 4326) 
   regions_sf[[region_col]][first]
 }
 
-cell_region <- assign_regions(onnv_results_pop_grid$coop, regions_sf, "region")
+cell_region <- assign_regions(onnv_results_pop_grid$coop, regions_sf, "region",
+                              crs = sf::st_crs(terra::crs(cam_pop)))
 
-national_metrics_summary_new <- function(res, cam_pop, age_groups, w_age,
+national_metrics_summary <- function(res, cam_pop, age_groups, w_age,
                                      cell_region = NULL,
-                                     agg_factor = 10, n = 1000, seed = 1) {
-  set.seed(seed)
-  stopifnot(length(w_age) == nrow(age_groups))
+                                     agg_factor = 10, n = 1000, seed = 1L,
+                                     probs = c(0.025, 0.975)) {
 
-  cam_pop_agg <- terra::aggregate(cam_pop, fact = agg_factor, fun = sum, na.rm = TRUE)
-  pop <- as.data.frame(terra::as.points(cam_pop_agg, values = TRUE, na.rm = TRUE))[, 1]
+  L  <- age_groups$age_lower
+  U  <- age_groups$age_upper         
+  dW <- U - L
+  
+
+  ## ---- population on the prediction grid 
+  cam_pop_agg <- terra::aggregate(cam_pop, fact = agg_factor, fun = "sum", na.rm = TRUE)
+  pts <- terra::as.points(cam_pop_agg, values = TRUE, na.rm = TRUE)
+  pop <- as.data.frame(pts)[, 1]
   stopifnot(length(pop) == nrow(res$coop))
-  ok <- !is.na(pop); pop <- pop[ok]; w <- pop / sum(pop)
 
-  sel   <- list(Intercept = 1, spatial.field = seq_len(res$mesh$n))
-  samp  <- inla.posterior.sample(n, res$output, selection = sel)
-  Ap_ok <- inla.spde.make.A(mesh = res$mesh, loc = as.matrix(res$coop))[ok, , drop = FALSE]
+  ok  <- is.finite(pop)
+  pop <- pop[ok]
+  w   <- pop / sum(pop)
 
-  L <- age_groups$age_lower; U <- age_groups$age_upper; dW <- U - L
-  suscept <- function(lam) {
-    s <- sapply(seq_along(L), function(j)
-      ifelse(lam > 1e-10, (1/(lam*dW[j])) * (exp(-lam*L[j]) - exp(-lam*U[j])), 1))
-    as.numeric(s %*% w_age)
+  ## ---- projector matrix (cells x mesh nodes) ------------------------------
+  A <- INLA::inla.spde.make.A(mesh = res$mesh, loc = as.matrix(res$coop))[ok, , drop = FALSE]
+  off_mesh <- abs(Matrix::rowSums(A) - 1) > 1e-6
+  if (any(off_mesh))
+    stop(sum(off_mesh), " prediction cells fall outside the mesh (A row sum != 1).")
+
+  ## ---- posterior draws (INLA's own RNG needs its own seed) ----------------
+  set.seed(seed)
+  sel  <- list(Intercept = 1, spatial.field = seq_len(res$mesh$n))
+  samp <- INLA::inla.posterior.sample(n, res$output, selection = sel, seed = seed)
+
+  nm    <- rownames(samp[[1]]$latent)
+  i_b0  <- grep("^Intercept(:|$)", nm)
+  i_fld <- grep("^spatial\\.field:", nm)
+  if (length(i_b0) != 1 || length(i_fld) != res$mesh$n)
+    stop("Could not find Intercept / spatial.field in the posterior sample; check effect names.")
+
+  b0  <- vapply(samp, function(s) s$latent[i_b0, 1],  numeric(1))
+  fld <- vapply(samp, function(s) s$latent[i_fld, 1], numeric(length(i_fld)))  # nodes x n
+
+  lam <- exp(as.matrix(A %*% fld) + rep(b0, each = nrow(A)))                    # cells x n
+
+  ## ---- age-averaged susceptible fraction (numerically stable) -------------
+  # mean of exp(-lam * a), a ~ Unif(L, U) = exp(-lam*L) * (1 - exp(-lam*dW)) / (lam*dW)
+  S <- matrix(0, nrow(lam), ncol(lam))
+  for (j in seq_along(L)) {
+    x   <- lam * dW[j]
+    avg <- ifelse(x < 1e-8, 1 - x / 2, -expm1(-x) / x)
+    S   <- S + w_age[j] * exp(-lam * L[j]) * avg
   }
 
-  # --- regional setup ---
-  do_reg <- !is.null(cell_region)
-  if (do_reg) {
-    stopifnot(length(cell_region) == nrow(res$coop))
-    grp     <- factor(cell_region[ok])
-    gi      <- as.integer(grp)
-    reg_pop <- as.numeric(rowsum(pop, gi))
-    reg_foi <- reg_sero <- reg_inf <-
-      matrix(NA_real_, nlevels(grp), n, dimnames = list(levels(grp), NULL))
-  }
+  inf <- pop * lam * S             # annual primary infections per cell, per draw
 
-  # running sums for per-cell posterior means
-  cell_foi <- cell_sero <- cell_inf <- numeric(length(pop))
-
-  foi_n <- seroprev_n <- infect_n <- numeric(n)
-  for (d in seq_len(n)) {
-    lat <- samp[[d]]$latent
-    b0  <- lat[grep("^Intercept",     rownames(lat)), 1]
-    fld <- lat[grep("^spatial.field", rownames(lat)), 1]
-    lam <- exp(b0 + as.numeric(Ap_ok %*% fld))
-    S   <- suscept(lam)
-    inf <- pop * lam * S
-
-    foi_n[d]      <- sum(w * lam)
-    seroprev_n[d] <- sum(w * (1 - S))
-    infect_n[d]   <- sum(inf)
-
-    cell_foi  <- cell_foi  + lam
-    cell_sero <- cell_sero + (1 - S)
-    cell_inf  <- cell_inf  + inf
-
-    if (do_reg) {
-      reg_foi[, d]  <- rowsum(pop * lam,     gi)[, 1] / reg_pop
-      reg_sero[, d] <- rowsum(pop * (1 - S), gi)[, 1] / reg_pop
-      reg_inf[, d]  <- rowsum(inf,           gi)[, 1]
-    }
-  }
+  ## ---- national -----------------------------------------------------------
+  foi_n  <- colSums(w * lam)
+  sero_n <- colSums(w * (1 - S))
+  inf_n  <- colSums(inf)
 
   summ <- function(x) c(mean = mean(x),
-                        ciL  = unname(quantile(x, 0.025)),
-                        ciU  = unname(quantile(x, 0.975)))
-  summ_rows <- function(m) {
+                        ciL  = quantile(x, probs[1], names = FALSE),
+                        ciU  = quantile(x, probs[2], names = FALSE))
+  summ_rows <- function(m, id) {
     out <- t(apply(m, 1, summ))
-    data.frame(region = rownames(m), out, row.names = NULL)
+    colnames(out) <- c("mean", "ciL", "ciU")
+    data.frame(id, out, row.names = NULL)
+  }
+
+  cell_stats <- function(m, prefix) {
+    s <- summ_rows(m, id = seq_len(nrow(m)))[, -1]
+    names(s) <- paste0(prefix, c("", "_ciL", "_ciU"))
+    s
   }
 
   out <- list(
-    foi = summ(foi_n), seroprev = summ(seroprev_n),
-    infections = summ(infect_n), pop_covered = sum(pop),
+    foi         = summ(foi_n),
+    seroprev    = summ(sero_n),
+    infections  = summ(inf_n),
+    pop_covered = sum(pop),
     cells = data.frame(res$coop[ok, , drop = FALSE], population = pop,
-                       foi = cell_foi / n, seroprev = cell_sero / n,
-                       infections = cell_inf / n)
+                       cell_stats(lam,   "foi"),
+                       cell_stats(1 - S, "seroprev"),
+                       cell_stats(inf,   "infections"))
   )
 
-  if (do_reg) {
-    stopifnot(isTRUE(all.equal(colSums(reg_inf), infect_n)))   # regions add to nation, per draw
-    out$regional <- list(
-      foi        = summ_rows(reg_foi),
-      seroprev   = summ_rows(reg_sero),
-      infections = summ_rows(reg_inf),
-      population = data.frame(region = levels(grp), population = reg_pop)
-    )
-  }
   out
-} 
+}
 
-ns_spatial <- national_metrics_summary_new(onnv_results_pop_grid, cam_pop, age_groups, w_age, n = 1000, cell_region = cell_region)
+ns_spatial <- national_metrics_summary(onnv_results_pop_grid, cam_pop, age_groups, w_age, n = 1000, cell_region = cell_region)
+
 # save national summary
 saveRDS(ns_spatial, here('Results/national_summary_spatial.rds'))
-
 ns_spatial <- readRDS(here('Results/national_summary_spatial.rds'))
+
 # print
 ns_spatial$foi
 ns_spatial$seroprev
@@ -400,18 +356,7 @@ cat(sprintf(
   ns_spatial$seroprev[['ciU']]  * 100
 ))
 
-# By region
-reg <- ns_spatial$regional
-region_table <- reg$population |>
-  left_join(rename_with(reg$foi,        ~ paste0("foi_", .x),  -region), by = "region") |>
-  left_join(rename_with(reg$seroprev,   ~ paste0("sero_", .x), -region), by = "region") |>
-  left_join(rename_with(reg$infections, ~ paste0("inf_", .x),  -region), by = "region")
 
-
-means_table <- region_table |>
-  dplyr::select(region, population, foi_mean, sero_mean, inf_mean)
-
-write.csv(means_table, here('Results/inla_pred_by_region.csv'), row.names = FALSE)
 
 # Cameroon wide prediction (maps + regional foi estimates)
 foi_onnv <- predicted_foi(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
@@ -433,55 +378,47 @@ infections_onnv <- predicted_annual_infections(
 
 
 
-
-
-
 # same aggregation as used for model fitting (10x10 km)
-cam_pop_agg <- terra::aggregate(cam_pop, fact = 10, fun = sum, na.rm = TRUE)
+xy <- terra::crds(cam_pop_agg, na.rm = TRUE)
+cells_sf <- sf::st_as_sf(cbind(ns_spatial$cells, lon = xy[, 1], lat = xy[, 2]),
+                         coords = c("lon", "lat"),
+                         crs = sf::st_crs(terra::crs(cam_pop_agg)))
+
 
 foi_region <- aggregate_predictions_by_region(
-  pred_sf   = foi_onnv$foi_sf,
+  pred_sf    = cells_sf,
   regions_sf = regions_sf,
-  value_col = "foi",
-  agg_type  = "weighted_mean"
+  value_col  = "foi",
+  agg_type   = "weighted_mean",
+  cam_pop    = cam_pop_agg
 )
-print(foi_region)
-
 prev_region <- aggregate_predictions_by_region(
-  pred_sf    = sero_onnv$prev_sf,
+  pred_sf    = cells_sf,
   regions_sf = regions_sf,
-  cam_pop    = cam_pop_agg,
-  value_col  = "prev",
-  agg_type   = "weighted_mean"
+  value_col  = "seroprev",
+  agg_type   = "weighted_mean",
+  cam_pop    = cam_pop_agg
 )
-print(prev_region)
  
 infection_region <- aggregate_predictions_by_region(
-  pred_sf    = infections_onnv$infections_sf,
+  pred_sf    = cells_sf,
   regions_sf = regions_sf,
   value_col  = "infections",
   agg_type   = "sum"
 )
 
-print(infection_region)
-print(infection_region$region)
-sum(infection_region$value_weighted)
 
-# save region level predictions
-region_level_predictions <- list(
-  foi = foi_region,
-  prev = prev_region,
-  infections = infection_region
-)
-saveRDS(region_level_predictions, here('Results/region_level_predictions.rds'))
-region_level_predictions <- readRDS('Results/region_level_predictions.rds')
+region_table <- foi_region |>
+  dplyr::select(region, population = total_population, foi_mean = value_weighted) |>
+  dplyr::left_join(dplyr::select(prev_region, region, sero_mean = value_weighted), by = "region") |>
+  dplyr::left_join(dplyr::select(infection_region, region, inf_mean = total_value), by = "region")
+
+means_table <- region_table |>
+  dplyr::select(region, population, foi_mean, sero_mean, inf_mean)
+
+write.csv(means_table, here('Results/inla_pred_by_region.csv'), row.names = FALSE)
 
 
-sum(infection_region$total_value)              # ~299,556
-sum(infection_region$n_points)                 # 542,883
-nrow(infections_onnv$infections_sf)                                  # if larger -> points dropped by the join
-sum(infections_onnv$infections_sf$infections, na.rm = TRUE)        # should be ~307,924
-sum(is.na(infections_onnv$infections_sf$infections))               # NAs being dropped?
 
 
 
@@ -594,57 +531,3 @@ ggsave("Results/supplementary_fig5.png",
 
 
 
-
-# Covariate INLA model - FOI map 
-foi_onnv_covariate_model <- predicted_foi(onnv_results_pop_grid_multivariable, onnv_results_pop_grid_multivariable$coop, pathogen_name = "ONNV")
-
-foi_onnv_covariate_model$plot
-
-# save plot 
-ggsave(here('Results/Supplementary_MultivariableSpatialAnalysis_FOImap.png'), 
-       plot = foi_onnv_covariate_model$plot,
-       width = 10, 
-       height = 7, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
-
-
-# interpret covariate model results
-interpret_covars <- function(res, digits = 3) {
-  sf <- res$output$summary.fixed
-  sf <- sf[rownames(sf) != "Intercept", , drop = FALSE]      # drop intercept
-
-  covars <- res$covars
-  sds    <- res$covar_sds[covars]                            # SDs used to standardise
-
-  out <- data.frame(
-    covariate      = covars,
-    # per 1 SD (the standardised coefficient) — FOI rate ratio
-    RR_perSD       = round(exp(sf$mean), digits),
-    RR_perSD_ciL   = round(exp(sf$`0.025quant`), digits),
-    RR_perSD_ciU   = round(exp(sf$`0.975quant`), digits),
-    # per 1 natural unit of the covariate (divide coef by its SD, then exp)
-    RR_perUnit     = round(exp(sf$mean / sds), digits),
-    RR_perUnit_ciL = round(exp(sf$`0.025quant` / sds), digits),
-    RR_perUnit_ciU = round(exp(sf$`0.975quant` / sds), digits),
-    row.names = NULL
-  )
-
-  # readable sentences
-  for (i in seq_len(nrow(out))) {
-    incon <- out$RR_perSD_ciL[i] < 1 & out$RR_perSD_ciU[i] > 1
-    cat(sprintf(
-      "%s: a 1-SD increase is associated with a %.0f%% %s in FOI (rate ratio %.2f, 95%% CrI %.2f-%.2f)%s\n",
-      out$covariate[i],
-      abs(out$RR_perSD[i] - 1) * 100,
-      ifelse(out$RR_perSD[i] >= 1, "increase", "decrease"),
-      out$RR_perSD[i], out$RR_perSD_ciL[i], out$RR_perSD_ciU[i],
-      ifelse(incon, " — CrI crosses 1, not clearly distinguishable from no effect", "")
-    ))
-  }
-  invisible(out)
-}
-
-covar_effects <- interpret_covars(onnv_results_pop_grid_multivariable)
-covar_effects

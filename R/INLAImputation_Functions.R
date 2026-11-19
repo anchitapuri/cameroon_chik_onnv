@@ -192,11 +192,7 @@ stopifnot(!any(is.na(age_groups$age_lower)),
 }
  
  
-# --- 3. Pool the imputations into national summaries --------------------------
-#
-# Pooling all M * n_draws samples gives the mixture posterior directly. The
-# variance decomposition is reported alongside so you can quote how much of the
-# total uncertainty comes from classification.
+
  
 summarise_imputed <- function(res) {
  
@@ -227,7 +223,6 @@ summarise_imputed <- function(res) {
                            max  = max(res$imputed_prevalence))
   )
  
-  # CONSISTENCY GUARANTEE: the per-cell means must sum to the national mean
   stopifnot(isTRUE(all.equal(sum(res$cell_infections),
                              out$infections[["mean"]],
                              tolerance = 1e-6)))
@@ -236,83 +231,3 @@ summarise_imputed <- function(res) {
 }
  
  
-# --- 4. Per-cell surfaces as sf, for mapping and regional aggregation ---------
-#
-# Built from the SAME per-cell means used for the national total, so regional
-# sums reconcile with the national figure exactly.
- 
-imputed_surfaces_sf <- function(res, crs = 32623) {
- 
-  sf::st_as_sf(
-    data.frame(
-      X              = res$coop[, "X"] * 1000,   # km -> m
-      Y              = res$coop[, "Y"] * 1000,
-      infections     = res$cell_infections,
-      foi            = res$cell_foi,
-      seroprevalence = res$cell_seroprev,
-      population     = res$pop
-    ),
-    coords = c("X", "Y"),
-    crs = 32633   # UTM Zone 33N
-  )
-}
- 
- 
-# --- 5. Regional aggregation that does not silently drop cells ----------------
-#
-# Replaces aggregate_predictions_by_region(). The original used
-# st_join(..., left = FALSE), an INNER join: any prediction cell falling outside
-# every region polygon was discarded without warning, so regional sums did not
-# reconcile with the national total. Here unmatched cells are assigned to the
-# nearest region and the number affected is reported.
- 
-aggregate_by_region <- function(pred_sf, regions_sf,value_col,
-                                region_col = "region",agg_type = c("weighted_mean", "sum"),
-                                pop_col = "population") {
- 
-  agg_type <- match.arg(agg_type)
- 
-  if (sf::st_crs(pred_sf) != sf::st_crs(regions_sf)) {
-    regions_sf <- sf::st_transform(regions_sf, sf::st_crs(pred_sf))
-  }
- 
-  joined <- sf::st_join(pred_sf, regions_sf[, region_col], left = TRUE)
- 
-  n_miss <- sum(is.na(joined[[region_col]]))
-  if (n_miss > 0) {
-    pct <- if (agg_type == "sum") {
-      100 * sum(joined[[value_col]][is.na(joined[[region_col]])], na.rm = TRUE) /
-        sum(joined[[value_col]], na.rm = TRUE)
-    } else NA_real_
-    message(n_miss, " of ", nrow(joined),
-            " cells fell outside all region polygons",
-            if (!is.na(pct)) sprintf(" (%.2f%% of the total)", pct) else "",
-            "; assigned to nearest region.")
-    nr <- sf::st_nearest_feature(joined[is.na(joined[[region_col]]), ], regions_sf)
-    joined[[region_col]][is.na(joined[[region_col]])] <- regions_sf[[region_col]][nr]
-  }
-  stopifnot(!any(is.na(joined[[region_col]])))
- 
-  if (agg_type == "sum") {
-    out <- joined %>%
-      sf::st_drop_geometry() %>%
-      dplyr::group_by(.data[[region_col]]) %>%
-      dplyr::summarise(total_value = sum(.data[[value_col]], na.rm = TRUE),
-                       n_cells = dplyr::n(), .groups = "drop")
-  } else {
-    # population-weighted mean: zero-population cells carry no weight and are
-    # dropped here, so n_cells is NOT comparable with the sum aggregation above.
-    out <- joined %>%
-      sf::st_drop_geometry() %>%
-      dplyr::filter(!is.na(.data[[pop_col]]), .data[[pop_col]] > 0) %>%
-      dplyr::group_by(.data[[region_col]]) %>%
-      dplyr::summarise(
-        value_weighted   = weighted.mean(.data[[value_col]], .data[[pop_col]], na.rm = TRUE),
-        value_unweighted = mean(.data[[value_col]], na.rm = TRUE),
-        total_population = sum(.data[[pop_col]], na.rm = TRUE),
-        n_cells          = dplyr::n(), .groups = "drop")
-  }
- 
-  out
-}
-

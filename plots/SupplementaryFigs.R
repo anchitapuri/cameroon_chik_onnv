@@ -218,8 +218,99 @@ ggsave("Results/NEW_supplementary_fig2.png",
 
 
 
+# CHIK cases 
+chik_pos <- onnv_results_pop_grid$data_filtered |>
+  dplyr::filter(CHIK_pos == 1)
 
-# --- Supplementary figure 3: CHIK seroprevalence with all vecotrs 
+chik_pos <- chik_pos %>%
+  count(district_lower) %>%
+  left_join(
+    chik_pos %>% distinct(district_lower, Longitude, Latitude),
+    by = "district_lower"
+  ) %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
+
+
+
+set.seed(42)  # for reproducibility
+chik_centroids_jittered <- chik_pos |>
+  dplyr::mutate(geometry = geometry + sf::st_sfc(lapply(seq_len(dplyr::n()), function(i) {
+    sf::st_point(c(runif(1, -0.05, 0.05), runif(1, -0.05, 0.05)))
+  })))
+sf::st_crs(chik_centroids_jittered) <- sf::st_crs(chik_pos)
+
+# Highlight two biggest cities in Cameroon 
+cities <- data.frame(
+  city = c("Yaoundé", "Douala"),
+  Latitude  = c(3.8617, 4.0511),
+  Longitude  = c(11.5202, 9.7679)
+)
+cities_sf <- st_as_sf(
+  cities,
+  coords = c("Longitude", "Latitude"),
+  crs = 4326
+)
+
+chik_infections <- ggplot()  +
+  geom_sf(
+    data = cameroon,
+    fill = "white",
+    colour = "#252525",
+    linewidth = 0.3
+  ) +
+  geom_sf(
+    data = chik_centroids_jittered,
+    colour = '#012c39', 
+    size = 9,
+    alpha = 0.6)  + 
+  scale_size(
+  range = c(4, 11),
+  breaks = c(1, 2, 3, 4),
+  name = "CHIK+ve samples"
+) +
+  geom_sf(
+    data = cities_sf,
+    aes(colour = city),
+    shape = 24,
+    fill = NA,
+    size = 11,
+    stroke = 4
+  )  + 
+  scale_colour_manual(
+    values = c("Yaoundé" = "#960034", "Douala" = "#d76201"),
+    name = ""
+  ) +
+  annotation_scale(
+    bar_cols = c("black", "white"),  # alternating black/white like the reference
+    height = unit(0.2, "cm"),
+    text_family = "sans", 
+    text_cex = 1.5
+  ) +
+  theme(
+    legend.position = c(0.32, 0.66), 
+    legend.key.height = unit(1.5, "cm"),  
+    legend.spacing.y  = unit(0.5, "cm"),    
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    legend.text = element_text(size = 20),        
+    legend.title = element_text(size = 20),   
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+  )
+print(chik_infections)
+
+ggsave(here('Results/fig4f.png'), 
+       plot = chik_infections,
+       width = 10, 
+       height = 12, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
+
+
+
+# --- Supplementary figure 4: CHIK seroprevalence with all vecotrs 
 # ---  CHIK 
 df_fun_chik <- calculate_prop_by_variable(
   data = meta_data_with_labels,

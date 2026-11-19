@@ -7,6 +7,7 @@ cameroon <- ne_countries(country = "Cameroon", returnclass = "sf")
 
 
 onnv_results_pop_grid <- readRDS(here('Results/ONNV_INLAResults.rds'))
+meta_data_with_labels <- read.csv(here('Results/meta_data_with_labels.csv'))
 
 # --- Cameroon wide maps 
 foi_onnv <- predicted_foi_diff_col(onnv_results_pop_grid, onnv_results_pop_grid$coop, pathogen_name = "ONNV")
@@ -51,107 +52,20 @@ ggsave(here('Results/Fig4a.png'),
 
 
 
-# CHIK cases 
-chik_pos <- onnv_results_pop_grid$data_filtered |>
-  dplyr::filter(CHIK_pos == 1)
+# ONNV +ve iwht all vectors 
+# Sliding windows: width = `frac` of the observed range, placed at `n` positions
+# across that range. Windows overlap, so an individual falls in several.
+make_windows <- function(x, frac = 0.3, n = 11) {
+  rng   <- range(x, na.rm = TRUE)
+  width <- frac * diff(rng)
+  upper <- seq(rng[1] + width, rng[2], length.out = n)
+  data.frame(min = upper - width, max = upper)
+}
 
-chik_pos <- chik_pos %>%
-  count(district_lower) %>%
-  left_join(
-    chik_pos %>% distinct(district_lower, Longitude, Latitude),
-    by = "district_lower"
-  ) %>%
-  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
-
-
-
-set.seed(42)  # for reproducibility
-chik_centroids_jittered <- chik_pos |>
-  dplyr::mutate(geometry = geometry + sf::st_sfc(lapply(seq_len(dplyr::n()), function(i) {
-    sf::st_point(c(runif(1, -0.05, 0.05), runif(1, -0.05, 0.05)))
-  })))
-sf::st_crs(chik_centroids_jittered) <- sf::st_crs(chik_pos)
-
-# Highlight two biggest cities in Cameroon 
-cities <- data.frame(
-  city = c("Yaoundé", "Douala"),
-  Latitude  = c(3.8617, 4.0511),
-  Longitude  = c(11.5202, 9.7679)
-)
-cities_sf <- st_as_sf(
-  cities,
-  coords = c("Longitude", "Latitude"),
-  crs = 4326
-)
-
-chik_infections <- ggplot()  +
-  geom_sf(
-    data = cameroon,
-    fill = "white",
-    colour = "#252525",
-    linewidth = 0.3
-  ) +
-  geom_sf(
-    data = chik_centroids_jittered,
-    colour = '#012c39', 
-    size = 9,
-    alpha = 0.6)  + 
-  scale_size(
-  range = c(4, 11),
-  breaks = c(1, 2, 3, 4),
-  name = "CHIK+ve samples"
-) +
-  geom_sf(
-    data = cities_sf,
-    aes(colour = city),
-    shape = 24,
-    fill = NA,
-    size = 11,
-    stroke = 4
-  )  + 
-  scale_colour_manual(
-    values = c("Yaoundé" = "#960034", "Douala" = "#d76201"),
-    name = ""
-  ) +
-  annotation_scale(
-    bar_cols = c("black", "white"),  # alternating black/white like the reference
-    height = unit(0.2, "cm"),
-    text_family = "sans", 
-    text_cex = 1.5
-  ) +
-  theme(
-    legend.position = c(0.32, 0.66), 
-    legend.key.height = unit(1.5, "cm"),  
-    legend.spacing.y  = unit(0.5, "cm"),    
-    panel.grid = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    legend.text = element_text(size = 20),        
-    legend.title = element_text(size = 20),   
-    panel.background = element_rect(fill = "white"),
-    plot.background = element_rect(fill = "white"),
-  )
-print(chik_infections)
-
-ggsave(here('Results/fig4f.png'), 
-       plot = chik_infections,
-       width = 10, 
-       height = 12, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")
-
-
-
-# Proportion of Anopheles positive vs proportion of ONNV positive
-#anoph_max <- seq(0, 1, 0.1)
-#anoph_min <- anoph_max - 0.5
-#anoph_min[which(anoph_min < 0)] <- 0
-
-# Proportion of Anopheles positive vs proportion of ONNV positive
-anoph_max <- seq(0, 1, 0.1)
-anoph_min <- anoph_max - 0.3
-anoph_min[which(anoph_min < 0)] <- 0
+w_fun <- make_windows(model_data$fun_pw_district)
+w_gam <- make_windows(model_data$gam_pw_district)
+w_aeg <- make_windows(model_data$aeg_pw_district)
+w_alb <- make_windows(model_data$alb_pw_district)
 
 
 # general plot format 
@@ -222,6 +136,102 @@ make_plot <- function(df_obs, raw_data, xlab, color, pos_col = "ONNV_pos") {
 }
 
 
+
+df_fun_binary <- calculate_prop_by_variable (
+  data = meta_data_with_labels,
+  var_col = "fun_pw_district", 
+  positive_col = "ONNV_pos",
+  breaks_max = w_fun$max, 
+  breaks_min = w_fun$min)
+
+df_gam_binary <- calculate_prop_by_variable (
+  data = meta_data_with_labels,
+  var_col = "gam_pw_district", 
+  positive_col = "ONNV_pos",
+  breaks_max = w_gam$max, 
+  breaks_min = w_gam$min)
+
+
+df_aegypti_binary <- calculate_prop_by_variable (
+  data = meta_data_with_labels,
+  var_col = "aeg_pw_district", 
+  positive_col = "ONNV_pos",
+  breaks_max = w_aeg$max, 
+  breaks_min = w_aeg$min)
+
+df_albopictus_binary <- calculate_prop_by_variable (
+  data = meta_data_with_labels,
+  var_col = "alb_pw_district", 
+  positive_col = "ONNV_pos",
+  breaks_max = w_alb$max, 
+  breaks_min = w_alb$min)
+
+
+# --- Plots
+prop_fun_prev <- make_plot_onnv(
+  df_fun_binary$obs,
+  meta_data_with_labels$fun_pw_district,
+   "Suitability<br>*Anopheles funestus*",
+  color ="#023e8a", pos_col =  "ONNV_pos"
+)
+
+prop_gam_prev <- make_plot_onnv(
+  df_gam_binary$obs,
+  meta_data_with_labels$gam_pw_district,
+  "Suitability<br>*Anopheles gambiae*",
+  color ="#165262", pos_col =  "ONNV_pos"
+)
+
+prop_aeg_prev <- make_plot_onnv(
+  df_aegypti_binary$obs,
+  meta_data_with_labels$aeg_pw_district,
+  "Suitability<br>*Aedes aegypti*",
+  color ="#c1518b", pos_col =  "ONNV_pos"
+)
+
+prop_albo_prev <- make_plot_onnv(
+  df_albopictus_binary$obs,
+  meta_data_with_labels$alb_pw_district,
+  "Suitability<br>*Aedes albopictus*",
+  color = "#430726", pos_col =  "ONNV_pos"
+)
+
+
+onnv_with_vectors <- (prop_fun_prev | prop_gam_prev | prop_aeg_prev | prop_albo_prev) 
+
+
+# --- Save Figures
+ggsave(here('Results/fig4d_e.png'), 
+       plot = onnv_with_vectors,
+       width = 20, 
+       height = 8, 
+       units = "in", 
+       dpi = 300,
+       bg = "white")
+
+
+
+
+# Proportion of Anopheles positive vs proportion of ONNV positive
+#anoph_max <- seq(0, 1, 0.1)
+#anoph_min <- anoph_max - 0.5
+#anoph_min[which(anoph_min < 0)] <- 0
+
+# Proportion of Anopheles positive vs proportion of ONNV positive
+anoph_max <- seq(0, 1, 0.1)
+anoph_min <- anoph_max - 0.3
+anoph_min[which(anoph_min < 0)] <- 0
+
+
+
+
+
+
+
+
+
+
+# --- old code -----
 df_gam_binary <- calculate_prop_by_variable (
   data = meta_data_with_labels,
   var_col = "gam_pw_district", 
@@ -237,11 +247,3 @@ prop_gam_prev <- make_plot(
   color ="#165262", pos_col =  "ONNV_pos"
 )
 print(prop_gam_prev)
-# --- Save Figures
-ggsave(here('Results/fig4d.png'), 
-       plot = prop_gam_prev,
-       width = 8, 
-       height = 8, 
-       units = "in", 
-       dpi = 300,
-       bg = "white")

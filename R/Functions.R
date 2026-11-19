@@ -1248,25 +1248,55 @@ plot_age_seroprevalence_obs_only_by_gender <- function(data, model_data, chains_
 }
 
 
-# prediction FOI, seroprevelance and infections by region 
+# prediction FOI, seroprevalence and infections by region
+# prediction FOI, seroprevalence and infections by region
 aggregate_predictions_by_region <- function(
   pred_sf,
   regions_sf,
   value_col,
   region_col = "region",
   agg_type   = c("weighted_mean", "sum"),
-  pop_col    = "population"     # population column already on pred_sf (same grid as predictions)
+  pop_col    = "population",    # population column on pred_sf, or filled from cam_pop
+  cam_pop    = NULL,            # aggregated population raster (same grid as predictions, e.g. cam_pop_agg)
+  max_miss   = 0.05            
 ) {
   agg_type <- match.arg(agg_type)
+  if (!value_col  %in% names(pred_sf))    stop("value_col '", value_col, "' not found in pred_sf")
+  if (!region_col %in% names(regions_sf)) stop("region_col '", region_col, "' not found in regions_sf")
+  if (is.na(sf::st_crs(pred_sf)))         stop("pred_sf has no CRS")
+  if (region_col %in% names(pred_sf)) pred_sf[[region_col]] <- NULL   # avoid .x/.y after join
 
   # --- CRS alignment ---
   if (sf::st_crs(pred_sf) != sf::st_crs(regions_sf)) {
     regions_sf <- sf::st_transform(regions_sf, sf::st_crs(pred_sf))
   }
+  regions_sf <- sf::st_make_valid(regions_sf)
 
-  n_in  <- nrow(pred_sf)
+  # --- population: use the pred_sf column, or look it up in cam_pop at each point ---
+  if (!pop_col %in% names(pred_sf) && !is.null(cam_pop)) {
+    pts <- sf::st_transform(pred_sf, terra::crs(cam_pop))
+    pred_sf[[pop_col]] <- terra::extract(cam_pop, terra::vect(pts), ID = FALSE)[, 1]
+    n_na_pop <- sum(is.na(pred_sf[[pop_col]]))
+    pop_rast <- terra::global(cam_pop, "sum", na.rm = TRUE)[1, 1]
+    message("Population from cam_pop: ", round(sum(pred_sf[[pop_col]], na.rm = TRUE)),
+            " on points vs ", round(pop_rast), " in raster; ",
+            n_na_pop, " points got no value.")
+    if (n_na_pop > max_miss * nrow(pred_sf))
+      stop(n_na_pop, " points got no population from cam_pop; ",
+           "check that pred_sf's CRS matches its coordinates and cam_pop is the aggregated raster.")
+  }
+
+  n_in     <- nrow(pred_sf)
   total_in <- sum(pred_sf[[value_col]], na.rm = TRUE)
   pred_sf$.pid <- seq_len(n_in)
+
+  # --- NA values cannot be counted: say so loudly ---
+  na_val <- is.na(pred_sf[[value_col]])
+  if (any(na_val)) {
+    pop_na <- if (pop_col %in% names(pred_sf)) sum(pred_sf[[pop_col]][na_val], na.rm = TRUE) else NA
+    warning(sum(na_val), " of ", n_in, " points have NA in ", value_col,
+            " (population ", round(pop_na), "); they are kept but contribute nothing.")
+  }
 
   # --- spatial join (keep all points) ---
   joined <- sf::st_join(pred_sf, regions_sf[, region_col], left = TRUE)
@@ -1280,6 +1310,9 @@ aggregate_predictions_by_region <- function(
 
   # points outside all polygons -> nearest region
   miss <- is.na(joined[[region_col]])
+  if (mean(miss) > max_miss)
+    stop(round(100 * mean(miss), 1), "% of points fall outside all regions; ",
+         "the CRS of pred_sf probably does not match its coordinates.")
   if (any(miss)) {
     message(sum(miss), " of ", n_in,
             " points fell outside all regions; assigning to nearest region (",
@@ -1289,16 +1322,18 @@ aggregate_predictions_by_region <- function(
     joined[[region_col]][miss] <- regions_sf[[region_col]][nr]
   }
 
-  stopifnot(nrow(joined) == n_in)
-
-  n_na <- sum(is.na(joined[[value_col]]))
-  if (n_na > 0) message(n_na, " points have NA in ", value_col, " and are ignored.")
+  stopifnot(nrow(joined) == n_in, !anyNA(joined[[region_col]]))
 
   joined <- sf::st_drop_geometry(joined)   # faster summarise, avoids MULTIPOINT output
 
   if (agg_type == "weighted_mean") {
     if (!pop_col %in% names(joined)) stop("pop_col '", pop_col, "' not found in pred_sf")
-    joined <- joined[!is.na(joined[[pop_col]]) & joined[[pop_col]] > 0, ]
+    na_pop <- is.na(joined[[pop_col]])
+    if (any(na_pop)) {
+      message(sum(na_pop), " points have NA population; given weight 0 (kept).")
+      joined[[pop_col]][na_pop] <- 0
+    }
+    pop_in <- sum(joined[[pop_col]])
 
     out <- joined |>
       dplyr::group_by(.data[[region_col]]) |>
@@ -1307,22 +1342,37 @@ aggregate_predictions_by_region <- function(
         value_unweighted = mean(.data[[value_col]], na.rm = TRUE),
         total_population = sum(.data[[pop_col]]),
         n_points         = dplyr::n(),
+        n_na             = sum(is.na(.data[[value_col]])),
         .groups = "drop"
       )
+    if (!isTRUE(all.equal(sum(out$total_population), pop_in)))
+      stop("Population lost in aggregation: ", round(pop_in), " in vs ",
+           round(sum(out$total_population)), " out.")
+
   } else {
     out <- joined |>
       dplyr::group_by(.data[[region_col]]) |>
       dplyr::summarise(
         total_value = sum(.data[[value_col]], na.rm = TRUE),
         n_points    = dplyr::n(),
+        n_na        = sum(is.na(.data[[value_col]])),
         .groups = "drop"
       )
+    if (!isTRUE(all.equal(sum(out$total_value), total_in)))
+      stop("Total lost in aggregation: ", round(total_in), " in vs ",
+           round(sum(out$total_value)), " out.")
     message("Sum of regions: ", round(sum(out$total_value)),
             " | input total: ", round(total_in))
   }
 
+  if (sum(out$n_points) != n_in)
+    stop("Points lost in aggregation: ", n_in, " in vs ", sum(out$n_points), " out.")
+  message("All ", n_in, " points assigned to ", nrow(out), " regions.")
+
   out
 }
+
+
 
 
 # --- Propotion by mosquito distribution + log population (using binary serostatus)
