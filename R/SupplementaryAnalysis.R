@@ -414,8 +414,7 @@ ggsave(here("Results/onnv_maps_covariate_model_comparison.png"), combined_DIC_ma
 
 # All antigens + correlation 
 
-full_data <- read.csv('/Users/ap2488/Desktop/Cameroon_Analysis_2025/base_complete_MFI_meta.csv')
-colnames(full_data)
+full_data <- read.csv(here('Data/base_complete_MFI_meta.csv'))
 
 antigens <- setdiff(names(full_data)[3:26], c("ONNV_VLP", "CHIKV_sE2", "MAYV_E2"))
 
